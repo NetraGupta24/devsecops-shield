@@ -1,0 +1,32 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+.pytest_cache/
+reports/
+
+# --- Terraform ---
+# State files can contain sensitive values and must never be committed.
+terraform/.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+tfplan
+crash.log
+# Real variable values (your IP, your email) stay on your laptop only.
+terraform.tfvars
+# The provider lock file IS committed: terraform/.terraform.lock.hcl
+
+# --- Secrets / keys (never commit) ---
+*.pem
+*.key
+id_rsa*
+id_ed25519*
+.env
+
+# --- Editors / OS ---
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
