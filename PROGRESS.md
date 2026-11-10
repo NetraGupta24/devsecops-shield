@@ -16,7 +16,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
-| Part B AWS | **v1 LIVE on blue** (build #8, 2026-11-10 ~17:33 UTC); v2 merge prepared | Build #8: CI → ECR `build-8` → deploy to blue → health gate → switch → port 80 serves build 8. Ansible hit `Load key: error in libcrypto` (Jenkins key pasted with CRLF/no final newline); the release still succeeded via ASG replacement + user data. Fixed in the Jenkinsfile (normalised key copy). Next: green heals with seeded build-8, then push the v2 merge (release to green) |
+| Part B AWS | **v2 LIVE on green** (build #10, ~18:10 UTC); blue = v1 build-8 (rollback target) | #8 v1→blue (Ansible key failed; ASG + user data delivered it). #9 v2 blocked by the 8080 version check (key still unreadable; green healthy but old build → no switch, tag restored). Key re-entered via `clip.exe`, plus a pre-flight key check. #10: Ansible updated green in place (17 ok, 0 unreachable) → health gate → switch. Next: rollback job (student clicks Build Now) |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -63,6 +63,12 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
    explicit approval before `terraform apply`.
 3. `terraform apply tfplan` (after approval).
 4. Student adds Jenkins credentials and confirms the SNS email.
-5. Build main → v1 to blue → switch. Merge feature/v2 → v2 to green → switch. Rollback job.
+5. ~~v1 to blue (#8)~~ ~~v2 to green (#10)~~. Rollback job: student clicks Build Now.
+   Planned demo order (keeps an old, credit-rich instance for /cpu): rollback (live → blue v1) →
+   bad release (merge demo/bad-release → deploy to green fails, no switch) → `git revert` → release
+   (live → green v2) → chaos_mode=true + release (live → blue, old instance) → /crash →
+   /cpu (scale-out + CPU alarm email) → docker stop (ASG replaces) → terminate in console →
+   chaos_mode=false.
+   NOTE: every push to main starts a release, so commit locally and push only when a release is wanted.
 6. Bad release demo (merge + revert). Self-healing demos (crash, docker stop, cpu, terminate). Alarm email.
 7. List screenshots/recordings per demo. Ask before `terraform destroy`.
