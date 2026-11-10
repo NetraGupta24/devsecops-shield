@@ -8,6 +8,12 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PIP_NO_CACHE_DIR=1 \
     PIP_DISABLE_PIP_VERSION_CHECK=1
 
+# Install Debian security fixes released after the base image was built
+# (otherwise Trivy correctly fails the build on fixed OS vulnerabilities).
+RUN apt-get update \
+ && apt-get upgrade -y --no-install-recommends \
+ && rm -rf /var/lib/apt/lists/*
+
 # A dedicated, unprivileged user to run the app (never run web apps as root).
 RUN groupadd --system --gid 10001 app \
  && useradd --system --uid 10001 --gid app --no-create-home --shell /usr/sbin/nologin app
@@ -16,8 +22,12 @@ WORKDIR /app
 
 # Install dependencies first, in their own layer: Docker re-uses this layer from
 # cache as long as requirements.txt does not change, which makes rebuilds fast.
+# Then remove pip itself: the running app never needs it, and pip bundles its
+# own copies of libraries (urllib3, msgpack, ...) that Trivy reports as vulnerable.
 COPY app/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt \
+ && pip uninstall -y pip \
+ && rm -rf /usr/local/lib/python3.*/ensurepip
 
 # Copy the application code (owned by root, so the app user cannot modify it).
 COPY app/ .
