@@ -26,7 +26,7 @@
       <jenkins.branch.BranchSource>
         <source class="jenkins.plugins.git.GitSCMSource" plugin="git">
           <id>splitease-github</id>
-          <remote>https://github.com/CHANGE-ME/devsecops-shield.git</remote>
+          <remote>https://github.com/NetraGupta24/devsecops-shield.git</remote>
           <credentialsId></credentialsId>
           <traits>
             <jenkins.plugins.git.traits.BranchDiscoveryTrait/>

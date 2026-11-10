@@ -10,3 +10,6 @@
 
 **Why it's fast:** nothing is rebuilt or redeployed, because the old version never stopped running.
 That is the main benefit of Blue-Green over redeploying the old version.
+
+**Phase 14:** after switching back, the job posts a Grafana annotation ("Rollback: traffic green ->
+blue (build-12)"), with the same never-fail protection as the main pipeline.

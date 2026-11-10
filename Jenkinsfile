@@ -15,11 +15,12 @@ pipeline {
         timeout(time: 60, unit: 'MINUTES')
     }
 
-    // Jenkins runs on localhost, so GitHub cannot call it (no webhooks).
-    // Instead Jenkins asks GitHub for new commits every ~2 minutes.
-    triggers {
-        pollSCM('H/2 * * * *')
-    }
+    // Trigger: Jenkins runs on localhost, so GitHub cannot call it (no
+    // webhooks). Instead the multibranch job "splitease" polls GitHub every
+    // minute (branch indexing, see jenkins/jobs/splitease/config.xml) and
+    // builds any branch whose latest commit changed. There is deliberately NO
+    // pollSCM() here as well: two polling mechanisms started two builds for
+    // the same commit, and on main a second release would flip traffic again.
 
     environment {
         AWS_DEFAULT_REGION = 'ap-south-1'
@@ -130,9 +131,33 @@ pipeline {
                         withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')]) {
                             dir('ansible') {
                                 sh '''#!/bin/bash
+                                    # A key pasted into the Jenkins web form can arrive with Windows
+                                    # line endings (CRLF) and/or without its final newline; OpenSSH
+                                    # then refuses it ("Load key: error in libcrypto"). Use a cleaned
+                                    # copy in a private temp folder that is deleted when this step ends.
+                                    KEY_DIR="$(mktemp -d)"
+                                    trap 'rm -rf "$KEY_DIR"' EXIT
+                                    tr -d '\\r' < "$SSH_KEY_FILE" > "$KEY_DIR/key"
+                                    if [ -n "$(tail -c1 "$KEY_DIR/key")" ]; then echo >> "$KEY_DIR/key"; fi
+                                    chmod 600 "$KEY_DIR/key"
+
+                                    # Pre-flight: fail fast and clearly if the credential is not a usable
+                                    # private key (otherwise it looks like "host unreachable", which this
+                                    # stage tolerates). Prints only yes/no facts and counts, never key data.
+                                    if ! ssh-keygen -y -f "$KEY_DIR/key" >/dev/null 2>&1; then
+                                        echo "ERROR: Jenkins credential 'ec2-ssh-key' is not a usable private key."
+                                        echo "  first line is -----BEGIN ... PRIVATE KEY-----: $(head -1 "$KEY_DIR/key" | grep -qE '^-----BEGIN [A-Z ]*PRIVATE KEY-----$' && echo yes || echo no)"
+                                        echo "  last line is -----END ... PRIVATE KEY-----:    $(tail -1 "$KEY_DIR/key" | grep -qE '^-----END [A-Z ]*PRIVATE KEY-----$' && echo yes || echo no)"
+                                        echo "  looks like a PUBLIC key (ssh-...):             $(grep -q '^ssh-' "$KEY_DIR/key" && echo yes || echo no)"
+                                        echo "  number of lines:                               $(wc -l < "$KEY_DIR/key")"
+                                        echo "  key lines containing spaces/tabs:              $(grep -v -- '-----' "$KEY_DIR/key" | grep -c '[[:blank:]]')"
+                                        echo "  Fix: re-enter the private key in Jenkins Credentials (see docs/notes/Jenkinsfile.md)."
+                                        exit 1
+                                    fi
+
                                     set +e
                                     ansible-playbook playbooks/deploy.yml \
-                                        --private-key "$SSH_KEY_FILE" --user "$SSH_USER" \
+                                        --private-key "$KEY_DIR/key" --user "$SSH_USER" \
                                         -e target_color=${IDLE_COLOR} -e ecr_repository_url=${ECR_REPO}
                                     rc=$?
                                     # rc 4 = some hosts were unreachable (typically an instance the
@@ -163,6 +188,15 @@ pipeline {
                     steps {
                         sh './scripts/bluegreen.sh switch ${IDLE_COLOR}'
                         script { env.SWITCHED = 'true' }
+                        // Mark the switch on the Grafana dashboard. Monitoring must never
+                        // break a release: catchError keeps the result SUCCESS even if the
+                        // 'grafana-api-token' credential is missing, and the script itself
+                        // always exits 0 (Grafana down, wrong token, ...).
+                        catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', message: 'Grafana annotation skipped') {
+                            withCredentials([string(credentialsId: 'grafana-api-token', variable: 'GRAFANA_TOKEN')]) {
+                                sh "./scripts/grafana-annotate.sh 'Release ${env.IMAGE_TAG}: traffic ${env.LIVE_COLOR} -> ${env.IDLE_COLOR}' release ${env.IDLE_COLOR}"
+                            }
+                        }
                         sh './scripts/bluegreen.sh check-version 80 ${BUILD_NUMBER}'
                         // First release only: the old colour has never run anything.
                         // Give it this release too, so its instances (replaced by the

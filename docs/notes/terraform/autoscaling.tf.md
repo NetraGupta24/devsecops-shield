@@ -7,7 +7,7 @@ subnets/AZs, registered in that colour's target group.
 - `health_check_type = "ELB"`: the ASG trusts the **ALB health check**. If `/health` fails (for
   example the container was stopped), the ASG terminates the instance and launches a new one. User
   data then boots it with the right version.
-- `health_check_grace_period = 300`: don't judge a new instance until it had time to boot.
+- `health_check_grace_period = 600`: don't judge a new instance until it has had time to boot. Measured: ~440 s on a zero-credit t3.micro (see `variables.tf.md`).
 - If an instance is terminated, the ASG notices it is below desired capacity and launches a
   replacement.
 

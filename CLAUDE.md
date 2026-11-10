@@ -6,7 +6,7 @@ This file is the project specification. Read it at the start of every session an
 
 **Title:** DevSecOps Shield: A Secure, Self-Healing CI/CD Pipeline on AWS with Blue-Green Deployment
 
-**Summary:** A developer pushes code to GitHub. Jenkins runs unit tests, a Gitleaks secret scan, builds a Docker image and scans it with Trivy. Only an image that passes every gate is pushed to AWS ECR. Terraform provisions the AWS infrastructure. Ansible deploys the approved image to the idle (Blue or Green) environment behind an Application Load Balancer. After a health check passes, the ALB switches production traffic to the new version, and the old one stays available for rollback. Auto Scaling Groups, ALB health checks and Docker restart policies make the system self-healing. CloudWatch collects logs and metrics and sends alarm emails.
+**Summary:** A developer pushes code to GitHub. Jenkins runs unit tests, a Gitleaks secret scan, builds a Docker image and scans it with Trivy. Only an image that passes every gate is pushed to AWS ECR. Terraform provisions the AWS infrastructure. Ansible deploys the approved image to the idle (Blue or Green) environment behind an Application Load Balancer. After a health check passes, the ALB switches production traffic to the new version, and the old one stays available for rollback. Auto Scaling Groups, ALB health checks and Docker restart policies make the system self-healing. CloudWatch collects logs and metrics and sends alarm emails. A local Grafana dashboard visualises the CloudWatch data, with Jenkins annotations marking every traffic switch.
 
 **Core principle:** Build → Test → Secure → Containerize → Scan → Store → Deploy → Verify → Switch Traffic → Self-Heal → Monitor
 
@@ -29,6 +29,7 @@ This file is the project specification. Read it at the start of every session an
 - EC2 instance types must be Free-plan eligible: use **t3.micro** (default); t3.small only if truly needed. Do not use t2.medium or anything larger.
 - Claude Pro (Claude Code via Claude Desktop).
 - Jenkins runs **locally on the laptop in Docker**, not on EC2 (a 1 GB instance cannot handle Docker builds plus Trivy, and running it locally saves credits).
+- Grafana (Phase 14) also runs **locally in Docker**, in the same compose stack as Jenkins (`127.0.0.1:3000`). Nothing extra runs on EC2.
 
 ## 4. The application: SplitEase
 
@@ -69,6 +70,7 @@ A Flask bill/expense splitter. It is **stateless** (no database): Auto Scaling a
 | CloudWatch | Logs, metrics, alarms (email via SNS) |
 | IAM | Least-privilege permissions |
 | AWS CLI | Used by Jenkins for ECR login, SSM and ALB listener changes |
+| Grafana | Local dashboard (Docker, pinned version) over CloudWatch metrics and logs, read through a read-only IAM user. Data source and dashboard are provisioned as code. Jenkins adds an annotation at every traffic switch and rollback |
 
 ## 6. Pipeline (Jenkinsfile)
 
@@ -86,6 +88,8 @@ A Flask bill/expense splitter. It is **stateless** (no database): Auto Scaling a
 
 A separate **rollback job** (`Jenkinsfile.rollback`) swaps the listeners back and updates `/splitease/live_color`.
 
+After every traffic switch (stage 10 and the rollback job), Jenkins posts a **Grafana annotation** (credential `grafana-api-token`). This step must never fail the pipeline.
+
 ## 7. AWS infrastructure (Terraform)
 
 - **Network:** one VPC, **2 public subnets in 2 AZs** (the ALB needs two), Internet Gateway, route table. **No NAT Gateway and no private subnets** (cost).
@@ -98,6 +102,7 @@ A separate **rollback job** (`Jenkinsfile.rollback`) swaps the listeners back an
 - **IAM:**
   - EC2 instance role: ECR read-only, `ssm:GetParameter` on `/splitease/*`, CloudWatch Logs write.
   - Separate **Jenkins IAM user** (keys stored only in Jenkins Credentials): ECR push to `splitease`, SSM get/put on `/splitease/*`, `elasticloadbalancing:Describe*` + `ModifyListener`, `ec2:DescribeInstances`, `autoscaling:Describe*`.
+  - Separate **Grafana IAM user** (read-only; key only in the gitignored `jenkins/.env`): CloudWatch `GetMetricData`/`ListMetrics`/`Describe*`, Logs Insights queries on `/splitease/*`, `ec2:Describe*` and `tag:GetResources` for name lookups.
   - Terraform runs as the student's own IAM user (never the root account).
 - **CloudWatch:** log group `/splitease/app` (7-day retention); alarms for high CPU per ASG and `UnHealthyHostCount > 0` per target group, sending to an SNS topic with an email subscription (`var.alert_email`).
 - **State:** local state in `terraform/`. `*.tfstate*`, `.terraform/` and `terraform.tfvars` are gitignored; commit `.terraform.lock.hcl` and a `terraform.tfvars.example`.
@@ -131,6 +136,7 @@ A separate **rollback job** (`Jenkinsfile.rollback`) swaps the listeners back an
 | 11 | CloudWatch logs, alarms, SNS email | App logs visible; alarm email received |
 | 12 | Full integration + record all demos (Section 11) | Screenshots and screen recordings saved in `docs/` |
 | 13 | Documentation: human-facing `README.md`, architecture diagram, report | Diagram matches the real implementation |
+| 14 | Grafana: local Docker (compose), CloudWatch data source via read-only IAM user, "SplitEase - Production" dashboard as code (CPU and instances per ASG, healthy/unhealthy hosts, ALB requests, response time, 5xx, app logs; refresh 1 min), Jenkins annotations on switch/rollback | A deployment shows its annotation and the `/cpu` demo is visible on the dashboard |
 
 Phases 0–4 run entirely on the laptop and cost nothing on AWS.
 
@@ -143,7 +149,7 @@ Phases 0–4 run entirely on the laptop and cost nothing on AWS.
 - Keep ASGs at max 2, ECR lifecycle at 5 images, log retention at 7 days.
 - Remind the student to check Billing → Credits and the Free Tier page regularly.
 
-**Do not add** (list as Future work only, unless the student explicitly asks): Kubernetes/K3s/EKS/ECS/Helm, ArgoCD, Prometheus/Grafana, SonarQube, Semgrep, OWASP dependency scanning, drift detection, HTTPS/ACM, WAF, Secrets Manager, multi-region, microservices, canary deployment.
+**Do not add** (list as Future work only, unless the student explicitly asks): Kubernetes/K3s/EKS/ECS/Helm, ArgoCD, Prometheus, SonarQube, Semgrep, OWASP dependency scanning, drift detection, HTTPS/ACM, WAF, Secrets Manager, multi-region, microservices, canary deployment.
 
 ## 11. Final demos
 
@@ -165,6 +171,7 @@ Phases 0–4 run entirely on the laptop and cost nothing on AWS.
 devsecops-shield/
 ├── CLAUDE.md
 ├── README.md                 # written in Phase 13
+├── PROGRESS.md               # session-to-session progress log
 ├── app/
 │   ├── app.py
 │   ├── templates/
@@ -177,13 +184,23 @@ devsecops-shield/
 ├── Jenkinsfile.rollback
 ├── jenkins/
 │   ├── Dockerfile
-│   └── docker-compose.yml
+│   ├── docker-compose.yml    # Jenkins + Grafana
+│   ├── .env.example          # template for the gitignored .env (Grafana secrets)
+│   ├── plugins.txt  init.groovy.d/  jobs/
+├── grafana/                  # Phase 14
+│   ├── provisioning/datasources/cloudwatch.yml
+│   ├── provisioning/dashboards/splitease.yml
+│   └── dashboards/splitease-production.json
+├── scripts/
+│   ├── bluegreen.sh          # shared Blue-Green helper (pipeline + rollback)
+│   └── grafana-annotate.sh   # never-failing Grafana annotation
 ├── terraform/
 │   ├── provider.tf  variables.tf  outputs.tf
 │   ├── network.tf  security_groups.tf  ecr.tf  iam.tf
 │   ├── alb.tf  launch_templates.tf  autoscaling.tf
 │   ├── ssm.tf  cloudwatch.tf
 │   ├── user_data.sh.tftpl
+│   ├── terraform-runner-policy.json   # IAM policy for the student's Terraform user
 │   └── terraform.tfvars.example
 ├── ansible/
 │   ├── ansible.cfg
@@ -196,5 +213,6 @@ devsecops-shield/
 └── docs/
     ├── architecture/
     ├── screenshots/
+    ├── notes/                # one study note per file
     └── report/
 ```

@@ -1,6 +1,8 @@
-# Runs Jenkins locally in Docker.
-#   Start:  cd jenkins && docker compose up -d --build
-#   Stop:   cd jenkins && docker compose down        (data is kept in the jenkins_home volume)
+# Runs Jenkins (CI/CD) and Grafana (monitoring dashboard) locally in Docker.
+#   First time: cp .env.example .env   and fill it in (.env is gitignored)
+#   Start:      cd jenkins && docker compose up -d --build
+#   Stop:       cd jenkins && docker compose down   (data is kept in the named volumes)
+# Both services share this compose network, so Jenkins reaches Grafana at http://grafana:3000.
 name: devsecops-jenkins
 
 services:
@@ -26,5 +28,33 @@ services:
       # Docker-outside-of-Docker: Jenkins' docker CLI uses Docker Desktop's engine.
       - /var/run/docker.sock:/var/run/docker.sock
 
+  grafana:
+    # Pinned version (released 2026-10-27). Upgrade deliberately, not automatically.
+    image: grafana/grafana:13.2.5
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      # Only reachable from this laptop: http://localhost:3000
+      - "127.0.0.1:3000:3000"
+    # Secrets (admin password, read-only AWS key) come from the gitignored .env file.
+    env_file:
+      - path: .env
+        required: true
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_AUTH_ANONYMOUS_ENABLED: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+      GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES: "false"
+      TZ: Asia/Kolkata
+    volumes:
+      # Grafana's own database (users, service-account tokens, annotations).
+      - grafana_data:/var/lib/grafana
+      # Data source + dashboard provider, and the dashboard JSON: all code, from git.
+      - ../grafana/provisioning:/etc/grafana/provisioning:ro
+      - ../grafana/dashboards:/var/lib/grafana/dashboards:ro
+
 volumes:
   jenkins_home:
+  grafana_data:
