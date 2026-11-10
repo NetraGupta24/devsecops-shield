@@ -47,3 +47,20 @@ break. The deploy stage now writes a cleaned copy (`tr -d '\r'`, plus a final ne
 private `mktemp -d` folder (mode 700) and deletes it with `trap ... EXIT`. The key is never printed.
 (That release still succeeded, because the ASG replaced the instance and user data booted the new
 version from SSM, which is the designed fallback.)
+
+**Second lesson: protect the pipeline from a broken credential.** Cleaning line endings wasn't
+enough (build #9 still got `error in libcrypto`), so the stored key had another defect from the
+copy-paste. Two changes:
+1. **Pre-flight key check:** before Ansible runs, `ssh-keygen -y` tests the key. If it fails, the
+   stage stops immediately with yes/no facts (BEGIN/END lines present? public key pasted by
+   mistake? how many lines, any spaces?) and **never prints key material**. Without this, a broken
+   key looked like "host unreachable", which the stage deliberately tolerates (for ASG
+   replacements), and the failure only surfaced minutes later at the version check.
+2. **Safe way to copy the key into Jenkins:** `clip.exe < ~/.ssh/splitease-deploy` copies the file's
+   exact bytes to the Windows clipboard, avoiding terminal-copy damage (wrapped lines, padding
+   spaces). Afterwards, clear the clipboard with `printf '' | clip.exe`.
+
+**What build #9 proved:** green was healthy but still running the *old* build. The health gate alone
+would have passed, but the **version check on the test listener (8080) refused to switch**, the
+idle colour's SSM tag was restored, and v1 kept serving users. That is exactly why the pipeline
+checks *both* health and version.

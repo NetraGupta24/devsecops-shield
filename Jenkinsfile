@@ -141,6 +141,20 @@ pipeline {
                                     if [ -n "$(tail -c1 "$KEY_DIR/key")" ]; then echo >> "$KEY_DIR/key"; fi
                                     chmod 600 "$KEY_DIR/key"
 
+                                    # Pre-flight: fail fast and clearly if the credential is not a usable
+                                    # private key (otherwise it looks like "host unreachable", which this
+                                    # stage tolerates). Prints only yes/no facts and counts, never key data.
+                                    if ! ssh-keygen -y -f "$KEY_DIR/key" >/dev/null 2>&1; then
+                                        echo "ERROR: Jenkins credential 'ec2-ssh-key' is not a usable private key."
+                                        echo "  first line is -----BEGIN ... PRIVATE KEY-----: $(head -1 "$KEY_DIR/key" | grep -qE '^-----BEGIN [A-Z ]*PRIVATE KEY-----$' && echo yes || echo no)"
+                                        echo "  last line is -----END ... PRIVATE KEY-----:    $(tail -1 "$KEY_DIR/key" | grep -qE '^-----END [A-Z ]*PRIVATE KEY-----$' && echo yes || echo no)"
+                                        echo "  looks like a PUBLIC key (ssh-...):             $(grep -q '^ssh-' "$KEY_DIR/key" && echo yes || echo no)"
+                                        echo "  number of lines:                               $(wc -l < "$KEY_DIR/key")"
+                                        echo "  key lines containing spaces/tabs:              $(grep -v -- '-----' "$KEY_DIR/key" | grep -c '[[:blank:]]')"
+                                        echo "  Fix: re-enter the private key in Jenkins Credentials (see docs/notes/Jenkinsfile.md)."
+                                        exit 1
+                                    fi
+
                                     set +e
                                     ansible-playbook playbooks/deploy.yml \
                                         --private-key "$KEY_DIR/key" --user "$SSH_USER" \
