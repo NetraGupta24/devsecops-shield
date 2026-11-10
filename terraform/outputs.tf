@@ -32,3 +32,8 @@ output "sns_topic_arn" {
 output "initial_live_color" {
   value = local.initial_live_color
 }
+
+output "grafana_iam_user" {
+  description = "Read-only user for Grafana. Create its access key yourself and put it ONLY in jenkins/.env"
+  value       = aws_iam_user.grafana.name
+}

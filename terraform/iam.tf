@@ -133,3 +133,61 @@ resource "aws_iam_user_policy" "jenkins" {
   user   = aws_iam_user.jenkins.name
   policy = data.aws_iam_policy_document.jenkins.json
 }
+
+# ---------------------------------------------------------------------------
+# 3) Grafana IAM user (Phase 14): READ-ONLY access to CloudWatch metrics and
+#    the SplitEase logs, for the local Grafana dashboard. Like the Jenkins user,
+#    no access key is created here: you create it yourself and put it only in
+#    the gitignored jenkins/.env file.
+# ---------------------------------------------------------------------------
+
+resource "aws_iam_user" "grafana" {
+  name          = "${var.project}-grafana"
+  force_destroy = true
+}
+
+data "aws_iam_policy_document" "grafana" {
+  statement {
+    sid = "ReadCloudWatchMetricsAndAlarms"
+    actions = [
+      "cloudwatch:GetMetricData",
+      "cloudwatch:ListMetrics",
+      "cloudwatch:DescribeAlarms",
+      "cloudwatch:DescribeAlarmsForMetric",
+      "cloudwatch:DescribeAlarmHistory",
+    ]
+    resources = ["*"] # these read APIs do not support resource-level permissions
+  }
+
+  statement {
+    sid       = "ListLogGroupsAndQueryResults"
+    actions   = ["logs:DescribeLogGroups", "logs:GetQueryResults", "logs:StopQuery"]
+    resources = ["*"] # account-level calls (no resource-level permissions)
+  }
+
+  statement {
+    sid = "QuerySplitEaseLogsOnly"
+    actions = [
+      "logs:StartQuery",
+      "logs:GetLogGroupFields",
+      "logs:GetLogEvents",
+      "logs:FilterLogEvents",
+    ]
+    resources = [
+      aws_cloudwatch_log_group.app.arn,
+      "${aws_cloudwatch_log_group.app.arn}:*",
+    ]
+  }
+
+  statement {
+    sid       = "ResolveResourceNamesForDashboards"
+    actions   = ["ec2:DescribeRegions", "ec2:DescribeInstances", "ec2:DescribeTags", "tag:GetResources"]
+    resources = ["*"]
+  }
+}
+
+resource "aws_iam_user_policy" "grafana" {
+  name   = "${var.project}-grafana-readonly"
+  user   = aws_iam_user.grafana.name
+  policy = data.aws_iam_policy_document.grafana.json
+}

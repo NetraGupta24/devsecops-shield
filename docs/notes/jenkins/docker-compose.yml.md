@@ -21,3 +21,15 @@ you would use separate build agents instead.
 **Why Jenkins runs locally, not on EC2:** a free-tier t3.micro (1 GB RAM) can't run Jenkins plus
 Docker builds plus Trivy, and running locally saves AWS credits. The catch is that GitHub can't
 reach `localhost`, so Jenkins *polls* GitHub instead of receiving webhooks.
+
+## Phase 14: the `grafana` service
+- `grafana/grafana:13.2.5`, pinned (released 2026-10-27; upgraded deliberately).
+- `127.0.0.1:3000:3000`: reachable only from this laptop: http://localhost:3000
+- `env_file: .env (required)`: the admin password and the read-only AWS key come from the
+  **gitignored** `jenkins/.env` (template: `.env.example`). Only Grafana gets these variables.
+- Hardening: no self sign-up, no anonymous access, no phone-home analytics.
+- Volumes: `grafana_data` (Grafana's database: users, tokens, annotations) and the repo's
+  `grafana/provisioning` + `grafana/dashboards` folders, mounted **read-only** (configuration as code).
+- Same compose network as Jenkins, so the pipeline reaches it at `http://grafana:3000`.
+- Nothing new runs on EC2. Grafana *reads* CloudWatch over the AWS API. That's why no Prometheus or
+  agents were needed.

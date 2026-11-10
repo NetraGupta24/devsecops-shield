@@ -64,3 +64,9 @@ copy-paste. Two changes:
 would have passed, but the **version check on the test listener (8080) refused to switch**, the
 idle colour's SSM tag was restored, and v1 kept serving users. That is exactly why the pipeline
 checks *both* health and version.
+
+**Phase 14 (Grafana annotation):** right after the switch, the stage posts an annotation such as
+"Release build-15: traffic blue -> green" (`scripts/grafana-annotate.sh`, token from the Jenkins
+credential `grafana-api-token`). It is wrapped in `catchError(buildResult: 'SUCCESS',
+stageResult: 'SUCCESS')`, and the script always exits 0, so monitoring problems can **never** fail a
+release.

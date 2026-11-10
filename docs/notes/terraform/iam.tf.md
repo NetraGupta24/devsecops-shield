@@ -22,3 +22,13 @@ after each `terraform apply`.
 
 **Why not use your own admin keys in Jenkins?** If Jenkins were ever compromised, the attacker would
 get only these narrow permissions, not your whole account.
+
+**3. Grafana IAM user** (`splitease-grafana`, Phase 14), **read-only**:
+- CloudWatch: `GetMetricData`, `ListMetrics`, `DescribeAlarms*` (read APIs; AWS doesn't support
+  limiting them to specific resources).
+- Logs: run Logs Insights queries **only on `/splitease/app`** (`StartQuery`, `GetLogEvents`, ...),
+  plus the account-level `DescribeLogGroups` / `GetQueryResults` / `StopQuery`.
+- `ec2:Describe*` (regions, instances, tags) and `tag:GetResources`, so Grafana can turn IDs into
+  names.
+- No write permission of any kind. As with Jenkins, Terraform creates no access key: you create it
+  and put it only in the gitignored `jenkins/.env`. Checked with IAM Access Analyzer: no findings.

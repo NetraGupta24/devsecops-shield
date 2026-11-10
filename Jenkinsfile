@@ -188,6 +188,15 @@ pipeline {
                     steps {
                         sh './scripts/bluegreen.sh switch ${IDLE_COLOR}'
                         script { env.SWITCHED = 'true' }
+                        // Mark the switch on the Grafana dashboard. Monitoring must never
+                        // break a release: catchError keeps the result SUCCESS even if the
+                        // 'grafana-api-token' credential is missing, and the script itself
+                        // always exits 0 (Grafana down, wrong token, ...).
+                        catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', message: 'Grafana annotation skipped') {
+                            withCredentials([string(credentialsId: 'grafana-api-token', variable: 'GRAFANA_TOKEN')]) {
+                                sh "./scripts/grafana-annotate.sh 'Release ${env.IMAGE_TAG}: traffic ${env.LIVE_COLOR} -> ${env.IDLE_COLOR}' release ${env.IDLE_COLOR}"
+                            }
+                        }
                         sh './scripts/bluegreen.sh check-version 80 ${BUILD_NUMBER}'
                         // First release only: the old colour has never run anything.
                         // Give it this release too, so its instances (replaced by the
