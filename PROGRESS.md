@@ -12,8 +12,8 @@ Last updated: 2026-11-10.
 | Phase 0 Setup | Done | All tools present. AWS CLI = IAM user `vle8-terraform-user`, ap-south-1. GitHub: git@github.com:NetraGupta24/devsecops-shield.git (public), SSH auth works |
 | Phase 1 SplitEase v1 + pytest | Done | 87 tests pass, localhost:5000 works |
 | Phase 2 Docker | Done | non-root uid 10001, Gunicorn; `/crash` + `--restart unless-stopped` verified |
-| Phase 3 Jenkins local | Built and running; **real run waiting on GitHub** | `jenkins/` image (pinned, sha256-verified tools), compose, jobs as code. Container `jenkins` up on http://localhost:8080, waiting for the student to unlock |
-| Phase 4 Security gates | Done (verified with the same commands inside the Jenkins image) | Gitleaks + Trivy; Dockerfile hardened (apt upgrade, pip removed) → 0 HIGH/CRITICAL |
+| Phase 3 Jenkins local | Done (real run) | Push to GitHub was detected by the 1-minute branch scan, and all 6 branches built automatically (2026-11-10) |
+| Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
 | Part B AWS | Not started | Needs: student approval of the plan/cost summary |
@@ -45,20 +45,17 @@ Last updated: 2026-11-10.
 - Public IP at time of writing: 106.219.183.153 (home IPs can change; update `my_ip` and re-apply).
 
 ## Waiting on the student (credential steps Claude must not do)
-1. GitHub repo URL (public or private) + Git auth from WSL (SSH key added to GitHub).
-2. `ssh-keygen -t ed25519 -f ~/.ssh/splitease-deploy -N "" -C splitease-deploy` (EC2 deploy key).
-3. Email address for CloudWatch alerts (goes in gitignored `terraform/terraform.tfvars`).
-4. Unlock Jenkins at http://localhost:8080, install suggested plugins, create the admin user.
+1-4. DONE (GitHub SSH, deploy key, alert email in terraform.tfvars, Jenkins unlocked).
 5. Approve `terraform apply` (plan summary given in chat).
 6. After apply: create an access key for IAM user `splitease-jenkins` and add Jenkins credentials
    `aws-access-key-id`, `aws-secret-access-key` (Secret text) and `ec2-ssh-key` (SSH username
    `ec2-user` + private key `~/.ssh/splitease-deploy`); confirm the SNS subscription email.
 
 ## Next steps (Part B runbook)
-1. Fill in the job URLs in `jenkins/jobs/*/config.xml`, push all branches, rebuild/restart Jenkins.
-2. Verify CI on all branches (demo branches fail at the right stage; main fails at "Push to ECR"
-   until AWS credentials exist).
-3. `terraform plan` (real values) → `terraform apply` (after approval).
+1. DONE: job URLs set, all branches pushed, Jenkins restarted, CI verified on all 6 branches.
+2. DONE: real `terraform plan` = 45 to add (saved as terraform/tfplan). WAITING for the student's
+   explicit approval before `terraform apply`.
+3. `terraform apply tfplan` (after approval).
 4. Student adds Jenkins credentials and confirms the SNS email.
 5. Build main → v1 to blue → switch. Merge feature/v2 → v2 to green → switch. Rollback job.
 6. Bad release demo (merge + revert). Self-healing demos (crash, docker stop, cpu, terminate). Alarm email.
