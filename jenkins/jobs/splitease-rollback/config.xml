@@ -15,7 +15,7 @@
       <configVersion>2</configVersion>
       <userRemoteConfigs>
         <hudson.plugins.git.UserRemoteConfig>
-          <url>https://github.com/CHANGE-ME/devsecops-shield.git</url>
+          <url>https://github.com/NetraGupta24/devsecops-shield.git</url>
           <credentialsId></credentialsId>
         </hudson.plugins.git.UserRemoteConfig>
       </userRemoteConfigs>

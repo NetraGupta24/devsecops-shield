@@ -9,7 +9,7 @@ Last updated: 2026-11-10.
 
 | Step | Status | Notes |
 |---|---|---|
-| Phase 0 Setup | Done, except GitHub | All tools present. AWS CLI = IAM user `vle8-terraform-user`, ap-south-1. **GitHub remote + auth not set up yet** |
+| Phase 0 Setup | Done | All tools present. AWS CLI = IAM user `vle8-terraform-user`, ap-south-1. GitHub: git@github.com:NetraGupta24/devsecops-shield.git (public), SSH auth works |
 | Phase 1 SplitEase v1 + pytest | Done | 87 tests pass, localhost:5000 works |
 | Phase 2 Docker | Done | non-root uid 10001, Gunicorn; `/crash` + `--restart unless-stopped` verified |
 | Phase 3 Jenkins local | Built and running; **real run waiting on GitHub** | `jenkins/` image (pinned, sha256-verified tools), compose, jobs as code. Container `jenkins` up on http://localhost:8080, waiting for the student to unlock |
