@@ -25,7 +25,7 @@ from splitter import (
 
 SPLIT_MODES = ("equal", "percentage", "amount")
 
-APP_VERSION = "2.0.0"
+APP_VERSION = "2.1.0"
 MAX_CPU_SECONDS = 300
 
 # Code run by each CPU-burning child process for the /cpu chaos endpoint.
@@ -106,6 +106,14 @@ def create_app(test_config=None):
 
     @app.get("/health")
     def health():
+        # v2.1: currency conversion needs an exchange-rate service, so the app
+        # reports itself unhealthy when that setting is missing.
+        # DEMO (failure demo 5): the developer configured FX_RATES_URL for the
+        # tests but forgot to add it to the deployment, so in AWS every
+        # instance answers /health with HTTP 500. All CI gates pass; the
+        # pipeline's health check on the idle colour must stop the release.
+        if not os.environ.get("FX_RATES_URL"):
+            return jsonify(status="error", reason="FX_RATES_URL is not configured"), 500
         return jsonify(status="ok")
 
     @app.get("/version")
