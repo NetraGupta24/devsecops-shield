@@ -12,6 +12,10 @@ Suggested reading order for the viva:
 5. `terraform/` - the AWS infrastructure
 6. `ansible/` - deploying to the servers
 7. `Jenkinsfile.rollback` - the rollback job
+8. `grafana/`, `scripts/grafana-annotate.sh` - the Grafana dashboard (Phase 14)
+
+Project deliverables (Phase 13): the top-level `README.md`, `docs/architecture/architecture.md`
+(diagrams of what was actually built) and `docs/report/report.md` (report draft with measured results).
 
 See also: `docs/notes/demo-branches.md` (which branch demonstrates what) and
 `docs/screenshots/CHECKLIST.md` (what evidence to capture for each demo).

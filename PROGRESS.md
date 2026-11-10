@@ -3,7 +3,7 @@
 Resume a new session with: **"Continue from PROGRESS.md"**.
 Mode for this build: Rule 2 is overridden (build end to end without stopping between phases).
 All other CLAUDE.md rules still apply (Rule 7 secrets, Rule 8 cost approvals).
-Last updated: 2026-11-10 (after real Jenkins CI runs).
+Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
 
 ## Status
 
@@ -17,6 +17,8 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
 | Part B AWS | **Demos 1–9 and 11 done**; demo 10 (terminate in console) + recordings = student; then destroy | #13 chaos release → live blue (chaos on). Demo 7 /crash: 502 for ~2 s, RestartCount 0→1, logs in CloudWatch. Demo 9 /cpu: ASG CPU 100% → blue scaled 1→2 at ~18:58, high-cpu alarm ALARM→OK. Demo 8 docker stop on green: unhealthy in ~47 s, ASG replaced it at 19:00:49. Alarm emails: green unhealthy 18:26/19:04, blue high-cpu 18:58, blue unhealthy 19:02 (scale-out instance booting). Evidence list: docs/screenshots/CHECKLIST.md. Destroy plan: 45 to destroy (incl. 6 ECR images). chaos_mode is still **true** |
+| Phase 13 Documentation | Done | `README.md`, `docs/architecture/architecture.md` (Mermaid diagrams), `docs/report/report.md` (measured results, problems and fixes, cost, future work) |
+| Phase 14 Grafana | Code done; **waiting: student approves `terraform apply` (2 to add: splitease-grafana user + read-only policy), fills `jenkins/.env`, creates a Grafana service-account token → Jenkins credential `grafana-api-token`** | `grafana/` provisioning + dashboard JSON (9 panels, refresh 1m), compose service `grafana/grafana:13.2.5` on 127.0.0.1:3000, `scripts/grafana-annotate.sh` (always exit 0) + `catchError` in both Jenkinsfiles. Tested BEFORE commit: throwaway Grafana against the real account → datasource health OK (metrics + logs), all panels return data (found and fixed: code-mode SEARCH needs builder fields); annotation script exit 0 for valid/missing/wrong token and Grafana down |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -57,7 +59,16 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
    `aws-access-key-id`, `aws-secret-access-key` (Secret text) and `ec2-ssh-key` (SSH username
    `ec2-user` + private key `~/.ssh/splitease-deploy`); confirm the SNS subscription email.
 
-## Next steps (Part B runbook)
+## Next steps (Phase 14 verification)
+1. Student: approve + run `terraform apply` (2 to add), create the splitease-grafana access key,
+   fill `jenkins/.env` (`cp .env.example .env`).
+2. Claude: `docker compose up -d grafana`, check provisioning + data source health.
+3. Student: Grafana → Service accounts → Editor → token → Jenkins credential `grafana-api-token`.
+4. Claude: release (push) → annotation on the dashboard; `/cpu` demo on the live colour (needs ≥10
+   CPU credits) → dashboard shows CPU + instance count.
+5. Screenshot list; ask before `terraform destroy`.
+
+## Next steps (Part B runbook, history)
 1. DONE: job URLs set, all branches pushed, Jenkins restarted, CI verified on all 6 branches.
 2. DONE: real `terraform plan` = 45 to add (saved as terraform/tfplan). WAITING for the student's
    explicit approval before `terraform apply`.
