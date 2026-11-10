@@ -117,3 +117,65 @@ def test_cpu_rejects_bad_seconds(chaos_client, monkeypatch):
     monkeypatch.setattr(app_module.subprocess, "Popen", lambda *a, **k: None)
     assert chaos_client.get("/cpu?seconds=abc").status_code == 400
     assert chaos_client.get("/cpu?seconds=0").status_code == 400
+
+
+# ---- v2 -------------------------------------------------------------------
+
+def test_footer_shows_version_and_build(client):
+    page = client.get("/").get_data(as_text=True)
+    assert f"v{app_module.APP_VERSION}" in page
+    assert "build 42" in page
+
+
+def test_api_split_percentage(client):
+    response = client.post("/api/split", json={
+        "total": "1000", "mode": "percentage",
+        "people": [{"name": "Asha", "value": "50"}, {"name": "Ben", "value": "30"}, {"name": "Chitra", "value": "20"}],
+    })
+    assert response.status_code == 200
+    data = response.get_json()
+    assert data["mode"] == "percentage"
+    assert [s["amount"] for s in data["shares"]] == ["500.00", "300.00", "200.00"]
+
+
+def test_api_split_amount(client):
+    response = client.post("/api/split", json={
+        "total": "1000", "mode": "amount",
+        "people": [{"name": "Asha", "value": "699.99"}, {"name": "Ben", "value": "300.01"}],
+    })
+    assert response.status_code == 200
+    assert [s["paise"] for s in response.get_json()["shares"]] == [69999, 30001]
+
+
+def test_api_split_amount_mismatch(client):
+    response = client.post("/api/split", json={
+        "total": "1000", "mode": "amount",
+        "people": [{"name": "Asha", "value": "600"}, {"name": "Ben", "value": "300"}],
+    })
+    assert response.status_code == 400
+    assert "add up to 900.00" in response.get_json()["error"]
+
+
+def test_api_split_percentage_bad_value(client):
+    response = client.post("/api/split", json={
+        "total": "100", "mode": "percentage",
+        "people": [{"name": "Asha", "value": "abc"}, {"name": "Ben", "value": "50"}],
+    })
+    assert response.status_code == 400
+    assert "Asha's percentage" in response.get_json()["error"]
+
+
+def test_api_split_custom_mode_needs_objects(client):
+    response = client.post("/api/split", json={"total": "100", "mode": "amount", "people": ["Asha", "Ben"]})
+    assert response.status_code == 400
+
+
+def test_api_split_unknown_mode(client):
+    response = client.post("/api/split", json={"total": "100", "mode": "random", "people": ["A"]})
+    assert response.status_code == 400
+
+
+def test_api_split_equal_still_default(client):
+    response = client.post("/api/split", json={"total": "10", "people": ["A", "B", "C"]})
+    assert response.get_json()["mode"] == "equal"
+    assert [s["amount"] for s in response.get_json()["shares"]] == ["3.34", "3.33", "3.33"]

@@ -15,8 +15,16 @@
       <label for="total">Total amount (Rs)</label>
       <input id="total" name="total" inputmode="decimal" placeholder="e.g. 1250.50" required>
 
-      <label for="people">People (one per line or separated by commas)</label>
+      <label for="mode">How to split</label>
+      <select id="mode" name="mode">
+        <option value="equal">Equally</option>
+        <option value="percentage">By percentage</option>
+        <option value="amount">By amount</option>
+      </select>
+
+      <label for="people" id="people-label">People (one per line or separated by commas)</label>
       <textarea id="people" name="people" rows="4" placeholder="Asha&#10;Ben&#10;Chitra" required></textarea>
+      <p class="hint" id="people-hint" hidden></p>
 
       <button type="submit">Split the bill</button>
     </form>
@@ -30,7 +38,7 @@
     </table>
   </main>
 
-  <footer>SplitEase &middot; a DevSecOps Shield demo app</footer>
+  <footer>SplitEase v{{ version }} &middot; build {{ build }}</footer>
 
   <script src="{{ url_for('static', filename='app.js') }}"></script>
 </body>

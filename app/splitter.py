@@ -16,17 +16,22 @@ class SplitError(ValueError):
     """Invalid input. The message is safe to show to the user."""
 
 
-def to_paise(amount, field="Total"):
-    """Convert a rupee amount such as "1250.50", 1250.5 or 1250 into paise (125050)."""
-    if amount is None or isinstance(amount, bool):
-        raise SplitError(f"{field} must be a number, for example 1250.50")
+def _to_decimal(value, field, example):
+    if value is None or isinstance(value, bool):
+        raise SplitError(f"{field} must be a number, for example {example}")
     try:
-        value = Decimal(str(amount).strip())
+        number = Decimal(str(value).strip())
     except InvalidOperation:
-        raise SplitError(f"{field} must be a number, for example 1250.50") from None
-    if not value.is_finite():
-        raise SplitError(f"{field} must be a number, for example 1250.50")
-    if value <= 0:
+        raise SplitError(f"{field} must be a number, for example {example}") from None
+    if not number.is_finite():
+        raise SplitError(f"{field} must be a number, for example {example}")
+    return number
+
+
+def to_paise(amount, field="Total", allow_zero=False):
+    """Convert a rupee amount such as "1250.50", 1250.5 or 1250 into paise (125050)."""
+    value = _to_decimal(amount, field, "1250.50")
+    if value < 0 or (value == 0 and not allow_zero):
         raise SplitError(f"{field} must be greater than zero")
     if value * 100 > MAX_TOTAL_PAISE:
         raise SplitError(f"{field} is too large")
@@ -73,3 +78,44 @@ def split_equal(total_paise, names):
     """
     base, remainder = divmod(total_paise, len(names))
     return [(name, base + (1 if i < remainder else 0)) for i, name in enumerate(names)]
+
+
+# ---- v2: custom splits ------------------------------------------------------
+
+def to_basis_points(percent, field):
+    """Convert a percentage such as "33.33" into basis points (3333). 100% = 10000."""
+    value = _to_decimal(percent, field, "33.33")
+    if value < 0 or value > 100:
+        raise SplitError(f"{field} must be between 0 and 100")
+    if value != value.quantize(Decimal("0.01")):
+        raise SplitError(f"{field} can have at most 2 decimal places")
+    return int(value * 100)
+
+
+def split_by_percentage(total_paise, names, basis_points):
+    """Split total_paise by percentages given in basis points (must add up to 10000 = 100%).
+
+    Each person first gets the rounded-DOWN share. The few leftover paise go,
+    one each, to the people whose exact share had the largest fraction cut
+    off ("largest remainder method"), ties going to whoever is first in the
+    list. So the shares always add up to the exact total.
+    """
+    if sum(basis_points) != 10000:
+        total_percent = Decimal(sum(basis_points)) / 100
+        raise SplitError(f"Percentages must add up to 100 (they add up to {total_percent})")
+    exact = [total_paise * bp for bp in basis_points]  # in 1/10000 paise
+    shares = [e // 10000 for e in exact]
+    leftover = total_paise - sum(shares)
+    by_largest_fraction = sorted(range(len(names)), key=lambda i: (-(exact[i] % 10000), i))
+    for i in by_largest_fraction[:leftover]:
+        shares[i] += 1
+    return list(zip(names, shares))
+
+
+def split_by_amount(total_paise, names, amounts_paise):
+    """Each person pays the amount given; the amounts must add up to the total exactly."""
+    if sum(amounts_paise) != total_paise:
+        raise SplitError(
+            f"The amounts add up to {format_paise(sum(amounts_paise))}, but the total is {format_paise(total_paise)}"
+        )
+    return list(zip(names, amounts_paise))
