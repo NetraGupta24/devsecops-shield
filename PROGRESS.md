@@ -16,7 +16,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
-| Part B AWS | Apply approved; **blocked on IAM permissions** | Student ran `terraform apply tfplan`: every create failed with AccessDenied (`vle8-terraform-user` has only ReadOnlyAccess + an EC2 read policy). Nothing was created (state = 4 data sources, 0 AWS resources). Fix: student attaches `terraform/terraform-runner-policy.json` as IAM policy `SplitEaseTerraformRunner` to `vle8-terraform-user`, then re-plan + apply (Claude's own `terraform apply` is blocked by Claude Code auto mode, so the student runs it) |
+| Part B AWS | Infrastructure up (45 resources); **first release blocked on Jenkins AWS credential** | Apply done (after IAM policy `SplitEaseTerraformRunner` + SG description fix + grace 300→600 s). Build main #7 passed CI then failed at Push to ECR: `IncompleteSignature ... missing equal-sign` = whitespace in `aws-access-key-id` (likely ID+TAB+secret pasted into one field). `splitease-jenkins` has 2 keys (the IAM max), both never used. Student deletes both, creates 1 new key (ID and secret on separate lines), and updates both Jenkins credentials |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -26,6 +26,10 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
   release demo is done by merging `demo/bad-release` into main, then reverting.
 - **Gitleaks** scans `--log-opts=HEAD` (full history of the built branch only), so the fake secret
   on its demo branch never breaks `main`.
+- **Only one build trigger** (multibranch branch indexing every minute). `pollSCM` in the
+  Jenkinsfile caused duplicate builds of the same commit, which on main would release twice and flip
+  traffic again. The stale trigger was cleared from the main branch job (backup:
+  `config.xml.bak-before-trigger-fix`).
 - **Health gate**: `wait-healthy` requires 5 consecutive healthy polls (60 s > ALB's 45 s
   detection), and fails fast on `Target.ResponseCodeMismatch`. A mocked test proved a single
   "healthy" poll could pass a bad release.
