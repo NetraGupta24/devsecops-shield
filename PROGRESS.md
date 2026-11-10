@@ -16,7 +16,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
-| Part B AWS | Demos 1, 5, 6 done; **chaos release in progress** (chaos_mode=true → live blue) | #10 v2 → green. Rollback job #1: green → blue (v1) OK. #11 bad release v2.1 → green: Ansible OK, ALB went stale-healthy 2 polls then ResponseCodeMismatch → stopped, tag restored, live blue untouched; ASG replaced the bad green instance (healthy again after ~8 min); green-unhealthy-hosts alarm fired (email). #12 revert → v2 live on green. CPU credits before the chaos release: blue 14.2 (old instance), green 2.3 |
+| Part B AWS | **Demos 1–9 and 11 done**; demo 10 (terminate in console) + recordings = student; then destroy | #13 chaos release → live blue (chaos on). Demo 7 /crash: 502 for ~2 s, RestartCount 0→1, logs in CloudWatch. Demo 9 /cpu: ASG CPU 100% → blue scaled 1→2 at ~18:58, high-cpu alarm ALARM→OK. Demo 8 docker stop on green: unhealthy in ~47 s, ASG replaced it at 19:00:49. Alarm emails: green unhealthy 18:26/19:04, blue high-cpu 18:58, blue unhealthy 19:02 (scale-out instance booting). Evidence list: docs/screenshots/CHECKLIST.md. Destroy plan: 45 to destroy (incl. 6 ECR images). chaos_mode is still **true** |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -70,5 +70,8 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
    /cpu (scale-out + CPU alarm email) → docker stop (ASG replaces) → terminate in console →
    chaos_mode=false.
    NOTE: every push to main starts a release, so commit locally and push only when a release is wanted.
-6. Bad release demo (merge + revert). Self-healing demos (crash, docker stop, cpu, terminate). Alarm email.
-7. List screenshots/recordings per demo. Ask before `terraform destroy`.
+6. ~~Bad release, crash, docker stop, cpu, alarm emails~~. Terminate demo: student, in the console.
+7. ~~Screenshot list~~ (docs/screenshots/CHECKLIST.md). Student records/screenshots BEFORE destroy,
+   then runs `terraform destroy` (Claude's apply/destroy are blocked by Claude Code auto mode).
+   After destroy, the next session needs: `terraform apply`, a new Jenkins access key (the IAM user
+   is recreated) in the Jenkins credentials; the SSH key credential stays valid (same key pair file).

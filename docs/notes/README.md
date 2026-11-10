@@ -12,3 +12,6 @@ Suggested reading order for the viva:
 5. `terraform/` - the AWS infrastructure
 6. `ansible/` - deploying to the servers
 7. `Jenkinsfile.rollback` - the rollback job
+
+See also: `docs/notes/demo-branches.md` (which branch demonstrates what) and
+`docs/screenshots/CHECKLIST.md` (what evidence to capture for each demo).
