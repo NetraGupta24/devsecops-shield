@@ -7,3 +7,7 @@
 - With chaos on, `/crash` and `/cpu` are tested with *mocks* (`monkeypatch`). The test replaces
   `threading.Timer` and `subprocess.Popen` with fakes, so the test run isn't actually killed and
   no CPU is burned.
+
+## v2 additions
+The footer shows version + build; the percentage and amount API modes; clear errors for bad values,
+wrong shapes and unknown modes; and equal split is still the default.

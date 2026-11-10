@@ -33,3 +33,12 @@
 
 **How it connects:** Runs under Gunicorn inside the Docker image. The ALB calls `/health`, and the
 Jenkins health-check stage calls `/version` on the test listener (port 8080).
+
+## v2 additions (branch `feature/v2`)
+- `APP_VERSION = "2.0.0"`.
+- `POST /api/split` accepts `"mode": "equal" | "percentage" | "amount"`. Equal is still the default,
+  so v1 API clients keep working (backwards compatible). For custom modes, `people` is
+  `[{"name": "Asha", "value": "60"}, ...]`.
+- `_calculate()` picks the right function from `splitter.py`.
+- `GET /` passes `version` and `build` to the template, so the **footer shows "SplitEase v2.0.0 ·
+  build 17"**. During the Blue-Green demo you can watch it change from v1 to v2 (and back on rollback).

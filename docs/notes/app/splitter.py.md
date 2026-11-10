@@ -16,3 +16,18 @@ exactly. The leftover is always smaller than the number of people, so nobody pay
 more than anyone else.
 
 **How it connects:** `app.py` calls these functions, and `tests/test_splitter.py` tests them.
+
+## v2 additions (branch `feature/v2`)
+- `to_basis_points("33.33")` gives `3333`. Percentages are stored as whole *basis points*
+  (1% = 100 bp, 100% = 10000 bp), so they are also integers with no floating point.
+- `split_by_percentage(total, names, basis_points)` uses the **largest remainder method**:
+  1. Each exact share is `total × bp / 10000` paise. Everyone first gets the rounded-*down* part.
+  2. The few paise left over go, one each, to the people whose share had the **largest fraction cut
+     off**. Ties go to whoever is earlier in the list.
+  3. Result: the shares add up to the exact total, and each person is within 1 paisa of their exact
+     share.
+  - Example: Rs 0.10 at 33.33/33.33/33.34% gives exact shares 3.333, 3.333, 3.334 paise. The floors
+    are 3, 3, 3 with 1 paisa left over, which goes to C (fraction .334 is the largest): 3, 3, 4.
+- `split_by_amount(total, names, amounts)`: everyone pays exactly what was entered, and the amounts
+  must add up to the total, otherwise you get a clear error ("The amounts add up to 900.00, but the
+  total is 1000.00").

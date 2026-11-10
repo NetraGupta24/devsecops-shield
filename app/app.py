@@ -12,9 +12,20 @@ import threading
 
 from flask import Flask, abort, jsonify, render_template, request
 
-from splitter import SplitError, clean_names, format_paise, split_equal, to_paise
+from splitter import (
+    SplitError,
+    clean_names,
+    format_paise,
+    split_by_amount,
+    split_by_percentage,
+    split_equal,
+    to_basis_points,
+    to_paise,
+)
 
-APP_VERSION = "1.0.0"
+SPLIT_MODES = ("equal", "percentage", "amount")
+
+APP_VERSION = "2.0.0"
 MAX_CPU_SECONDS = 300
 
 # Code run by each CPU-burning child process for the /cpu chaos endpoint.
@@ -23,6 +34,28 @@ _BURN_CODE = "import sys, time\nend = time.time() + int(sys.argv[1])\nwhile time
 
 def _env_flag(name):
     return os.environ.get(name, "false").strip().lower() == "true"
+
+
+def _calculate(mode, total_paise, people):
+    """Run the right split for the mode.
+
+    equal:      people = ["Asha", "Ben"]
+    percentage: people = [{"name": "Asha", "value": "60"}, {"name": "Ben", "value": "40"}]
+    amount:     people = [{"name": "Asha", "value": "600"}, {"name": "Ben", "value": "400"}]
+    """
+    if mode == "equal":
+        if isinstance(people, list):  # also accept [{"name": ...}] objects
+            people = [p.get("name") if isinstance(p, dict) else p for p in people]
+        return split_equal(total_paise, clean_names(people))
+
+    if not isinstance(people, list) or not all(isinstance(p, dict) for p in people):
+        raise SplitError('For a custom split, people must look like [{"name": "Asha", "value": "60"}, ...]')
+    names = clean_names([p.get("name") for p in people])
+    if mode == "percentage":
+        points = [to_basis_points(p.get("value"), f"{name}'s percentage") for name, p in zip(names, people)]
+        return split_by_percentage(total_paise, names, points)
+    amounts = [to_paise(p.get("value"), f"{name}'s amount", allow_zero=True) for name, p in zip(names, people)]
+    return split_by_amount(total_paise, names, amounts)
 
 
 def create_app(test_config=None):
@@ -48,21 +81,24 @@ def create_app(test_config=None):
 
     @app.get("/")
     def index():
-        return render_template("index.html")
+        # v2: the footer shows the version and build, so a Blue-Green switch is visible on screen.
+        return render_template("index.html", version=app.config["APP_VERSION"], build=app.config["BUILD_NUMBER"])
 
     @app.post("/api/split")
     def api_split():
         data = request.get_json(silent=True)
         if not isinstance(data, dict):
             return jsonify(error="Send a JSON object with 'total' and 'people'"), 400
+        mode = data.get("mode", "equal")
+        if mode not in SPLIT_MODES:
+            return jsonify(error=f"mode must be one of: {', '.join(SPLIT_MODES)}"), 400
         try:
             total_paise = to_paise(data.get("total"))
-            names = clean_names(data.get("people"))
-            shares = split_equal(total_paise, names)
+            shares = _calculate(mode, total_paise, data.get("people"))
         except SplitError as err:
             return jsonify(error=str(err)), 400
         return jsonify(
-            mode="equal",
+            mode=mode,
             total=format_paise(total_paise),
             total_paise=total_paise,
             shares=[{"name": n, "amount": format_paise(p), "paise": p} for n, p in shares],

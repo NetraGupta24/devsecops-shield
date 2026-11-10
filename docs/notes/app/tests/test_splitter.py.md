@@ -9,3 +9,7 @@
 
 **How it connects:** This is the *Unit tests* stage of the pipeline. If any test fails, Jenkins
 stops and nothing is deployed (demo 2).
+
+## v2 additions
+Percentage maths (largest remainder, ties, the add-up-to-total property for many totals and
+percentage mixes, must add up to 100%) and amount maths (must match the total).
