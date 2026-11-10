@@ -1,0 +1,3 @@
+# Extra packages needed only to TEST the app (not shipped in the Docker image).
+-r requirements.txt
+pytest==9.2.0

@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>SplitEase</title>
+  <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+  <main class="card">
+    <h1>SplitEase</h1>
+    <p class="lead">Split a bill fairly. Shares always add up to the exact total.</p>
+
+    <form id="split-form" novalidate>
+      <label for="total">Total amount (Rs)</label>
+      <input id="total" name="total" inputmode="decimal" placeholder="e.g. 1250.50" required>
+
+      <label for="people">People (one per line or separated by commas)</label>
+      <textarea id="people" name="people" rows="4" placeholder="Asha&#10;Ben&#10;Chitra" required></textarea>
+
+      <button type="submit">Split the bill</button>
+    </form>
+
+    <p id="error" class="error" role="alert" hidden></p>
+
+    <table id="result" hidden>
+      <thead><tr><th>Person</th><th class="num">Share (Rs)</th></tr></thead>
+      <tbody></tbody>
+      <tfoot><tr><th>Total</th><th class="num" id="result-total"></th></tr></tfoot>
+    </table>
+  </main>
+
+  <footer>SplitEase &middot; a DevSecOps Shield demo app</footer>
+
+  <script src="{{ url_for('static', filename='app.js') }}"></script>
+</body>
+</html>
