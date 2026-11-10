@@ -16,7 +16,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
-| Part B AWS | Plan approved and saved; **apply blocked** | Real plan with student's values: 45 to add, 0 change/destroy (`terraform/tfplan`). Claude's `terraform apply` was blocked by Claude Code's auto-mode permission check, so the student runs it or allows it |
+| Part B AWS | Apply approved; **blocked on IAM permissions** | Student ran `terraform apply tfplan`: every create failed with AccessDenied (`vle8-terraform-user` has only ReadOnlyAccess + an EC2 read policy). Nothing was created (state = 4 data sources, 0 AWS resources). Fix: student attaches `terraform/terraform-runner-policy.json` as IAM policy `SplitEaseTerraformRunner` to `vle8-terraform-user`, then re-plan + apply (Claude's own `terraform apply` is blocked by Claude Code auto mode, so the student runs it) |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
