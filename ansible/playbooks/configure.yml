@@ -1,0 +1,26 @@
+# Prepare the instances of one colour to run containers (Docker installed + running).
+# Usage (from the ansible/ folder):
+#   ansible-playbook playbooks/configure.yml -e target_color=blue --private-key ~/.ssh/splitease-deploy
+- name: Configure the {{ target_color }} instances
+  hosts: "env_{{ target_color }}"
+  become: true
+  gather_facts: false
+
+  pre_tasks:
+    - name: Only blue or green can be targeted
+      ansible.builtin.assert:
+        that: target_color in ['blue', 'green']
+        fail_msg: "Pass -e target_color=blue or -e target_color=green"
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+    # A brand-new instance may still be running its user data (which also
+    # installs Docker). Wait for it, so the two don't run dnf at the same time.
+    - name: Wait for first-boot setup (cloud-init / user data) to finish
+      ansible.builtin.command: cloud-init status --wait
+      changed_when: false
+      failed_when: false
+
+  roles:
+    - docker

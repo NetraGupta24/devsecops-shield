@@ -1,0 +1,118 @@
+# Deploy the image recorded in SSM (/splitease/<colour>/image_tag) to every
+# running instance of one colour.
+# Usage (from the ansible/ folder; Jenkins runs exactly this):
+#   ansible-playbook playbooks/deploy.yml -e target_color=green \
+#     -e ecr_repository_url=<account>.dkr.ecr.ap-south-1.amazonaws.com/splitease \
+#     --private-key ~/.ssh/splitease-deploy
+
+- name: Prepare servers (Docker)
+  ansible.builtin.import_playbook: configure.yml
+
+- name: Deploy SplitEase to the {{ target_color }} environment
+  hosts: "env_{{ target_color }}"
+  become: true
+  gather_facts: false
+
+  vars:
+    aws_region: ap-south-1
+    container_name: splitease
+    app_port: 5000
+    log_group: /splitease/app
+    # Read the desired version and chaos flag from SSM (on the Jenkins side),
+    # the same source of truth that EC2 user data uses for new instances.
+    image_tag: "{{ lookup('amazon.aws.ssm_parameter', '/splitease/' ~ target_color ~ '/image_tag', region=aws_region) }}"
+    chaos_mode: "{{ lookup('amazon.aws.ssm_parameter', '/splitease/chaos_mode', region=aws_region) }}"
+    image: "{{ ecr_repository_url }}:{{ image_tag }}"
+    ecr_registry: "{{ ecr_repository_url.split('/')[0] }}"
+
+  tasks:
+    - name: Check the inputs
+      ansible.builtin.assert:
+        that:
+          - ecr_repository_url is defined
+          - image_tag != 'none'
+        fail_msg: "Pass -e ecr_repository_url=... and set /splitease/{{ target_color }}/image_tag in SSM first"
+      run_once: true
+      delegate_to: localhost
+      become: false
+
+    - name: Log in to ECR (the token is short-lived; never printed)
+      ansible.builtin.shell: >
+        set -o pipefail &&
+        aws ecr get-login-password --region {{ aws_region }} |
+        docker login --username AWS --password-stdin {{ ecr_registry }}
+      args:
+        executable: /bin/bash
+      changed_when: false
+      no_log: true
+
+    - name: Pull {{ image }}
+      ansible.builtin.command: docker pull {{ image }}
+      register: pull
+      changed_when: "'Downloaded newer image' in pull.stdout"
+
+    - name: Log out of ECR
+      ansible.builtin.command: docker logout {{ ecr_registry }}
+      changed_when: false
+
+    - name: Look at the container that is running now (if any)
+      ansible.builtin.command: docker inspect {{ container_name }}
+      register: current
+      changed_when: false
+      failed_when: false
+
+    - name: Decide whether the container must be replaced
+      ansible.builtin.set_fact:
+        needs_replace: >-
+          {{ current.rc != 0
+             or (current.stdout | from_json)[0].Config.Image != image
+             or ('CHAOS_MODE=' ~ chaos_mode) not in (current.stdout | from_json)[0].Config.Env
+             or not (current.stdout | from_json)[0].State.Running }}
+
+    - name: Remove the old container
+      ansible.builtin.command: docker rm -f {{ container_name }}
+      when: needs_replace | bool and current.rc == 0
+      changed_when: true
+
+    - name: Start the new container (same settings as EC2 user data)
+      ansible.builtin.command:
+        argv:
+          - docker
+          - run
+          - -d
+          - --name={{ container_name }}
+          - --restart=unless-stopped
+          - --publish={{ app_port }}:5000
+          - --env=CHAOS_MODE={{ chaos_mode }}
+          - --log-driver=awslogs
+          - --log-opt=awslogs-region={{ aws_region }}
+          - --log-opt=awslogs-group={{ log_group }}
+          - --log-opt=awslogs-stream={{ target_color }}/{{ instance_id }}
+          - "{{ image }}"
+      when: needs_replace | bool
+      changed_when: true
+
+    - name: Wait until the app answers /health on the instance
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/health"
+        return_content: true
+      register: health
+      until: health.status == 200
+      retries: 20
+      delay: 3
+
+    - name: Confirm the instance runs the expected build
+      ansible.builtin.uri:
+        url: "http://127.0.0.1:{{ app_port }}/version"
+        return_content: true
+      register: version
+      failed_when: version.json.build != (image_tag | replace('build-', ''))
+
+    - name: Remove old, unused images to save disk space
+      ansible.builtin.command: docker image prune -af
+      register: prune
+      changed_when: "'Total reclaimed space: 0B' not in prune.stdout"
+
+    - name: Show result
+      ansible.builtin.debug:
+        msg: "{{ inventory_hostname }} ({{ instance_id }}) runs {{ image_tag }} (version {{ version.json.version }}), chaos_mode={{ chaos_mode }}"

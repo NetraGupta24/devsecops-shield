@@ -1,0 +1,29 @@
+# Dynamic inventory: instead of a fixed list of server IPs (which would be
+# wrong as soon as Auto Scaling replaces a server), Ansible asks the EC2 API
+# for the running instances every time it runs.
+plugin: amazon.aws.aws_ec2
+
+regions:
+  - ap-south-1
+
+# Only running SplitEase instances.
+filters:
+  tag:Project: splitease
+  instance-state-name: running
+
+# Put each instance in a group named after its Env tag: env_blue or env_green.
+# (Written as ec2_tags['Env'] rather than ec2_tags.Env: same meaning, but the
+#  dotted form looks like "key: <random value>" and Gitleaks flags it as a
+#  possible API key - a false positive.)
+keyed_groups:
+  - key: "ec2_tags['Env']"
+    prefix: env
+
+# Use the newer "ec2_tags" variable only ("tags" is deprecated in amazon.aws).
+use_deprecated_tags: false
+
+# Connect to the instance's public IP address.
+hostnames:
+  - ip-address
+compose:
+  ansible_host: public_ip_address

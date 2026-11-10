@@ -1,0 +1,26 @@
+# Role "docker": make sure Docker is installed and running on the instance.
+# User data normally installs it at boot; this role makes the server state
+# correct even if that step failed or the instance was created another way.
+
+- name: Check whether Docker is already installed
+  ansible.builtin.stat:
+    path: /usr/bin/docker
+  register: docker_binary
+
+- name: Install Docker
+  ansible.builtin.dnf:
+    name: docker
+    state: present
+  when: not docker_binary.stat.exists
+
+- name: Make sure Docker is running and starts at boot
+  ansible.builtin.systemd_service:
+    name: docker
+    state: started
+    enabled: true
+
+- name: Let ec2-user run docker commands
+  ansible.builtin.user:
+    name: ec2-user
+    groups: docker
+    append: true

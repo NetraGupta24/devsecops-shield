@@ -1,0 +1,58 @@
+// Rollback job: send production traffic back to the previous colour.
+// Nothing is rebuilt or redeployed: the previous version is still running on
+// the other colour, so this takes seconds.
+pipeline {
+    agent any
+
+    options {
+        timestamps()
+        disableConcurrentBuilds()
+        timeout(time: 15, unit: 'MINUTES')
+    }
+
+    environment {
+        AWS_DEFAULT_REGION    = 'ap-south-1'
+        AWS_ACCESS_KEY_ID     = credentials('aws-access-key-id')
+        AWS_SECRET_ACCESS_KEY = credentials('aws-secret-access-key')
+    }
+
+    stages {
+        stage('Current state') {
+            steps {
+                sh './scripts/bluegreen.sh status'
+                script {
+                    env.LIVE_COLOR = sh(returnStdout: true, script: './scripts/bluegreen.sh live-color').trim()
+                    env.TARGET_COLOR = sh(returnStdout: true, script: "./scripts/bluegreen.sh other-color ${env.LIVE_COLOR}").trim()
+                    env.TARGET_TAG = sh(returnStdout: true, script: "./scripts/bluegreen.sh get-tag ${env.TARGET_COLOR}").trim()
+                    if (env.TARGET_TAG == 'none') {
+                        error("Nothing has ever been released to ${env.TARGET_COLOR}, so there is nothing to roll back to.")
+                    }
+                    echo "Rolling back: ${env.LIVE_COLOR} -> ${env.TARGET_COLOR} (${env.TARGET_TAG})"
+                }
+            }
+        }
+
+        stage('Check previous colour is healthy') {
+            steps {
+                // Never send users to a colour that is not healthy.
+                sh './scripts/bluegreen.sh wait-healthy ${TARGET_COLOR} 120'
+            }
+        }
+
+        stage('Switch traffic back') {
+            steps {
+                sh './scripts/bluegreen.sh switch ${TARGET_COLOR}'
+            }
+        }
+
+        stage('Verify') {
+            steps {
+                script {
+                    def build = env.TARGET_TAG.replace('build-', '')
+                    sh "./scripts/bluegreen.sh check-version 80 ${build}"
+                }
+                sh './scripts/bluegreen.sh status'
+            }
+        }
+    }
+}

@@ -1,0 +1,61 @@
+#!/bin/bash
+# EC2 user data for the "${color}" environment (Terraform fills in the ${color}-style values).
+# Runs ONCE, as root, when a NEW instance boots - e.g. when the Auto Scaling
+# Group launches a replacement at 3 a.m. with nobody around. It makes the new
+# instance run exactly the version recorded in SSM for its colour.
+# Output is logged to /var/log/cloud-init-output.log on the instance.
+set -euo pipefail
+
+COLOR="${color}"
+REGION="${aws_region}"
+REGISTRY="${ecr_registry}"
+REPO_URL="${ecr_repository_url}"
+LOG_GROUP="${log_group}"
+PARAM_PREFIX="${param_prefix}"
+APP_PORT="${app_port}"
+CONTAINER="splitease"
+
+echo "[user-data] Installing Docker"
+for attempt in 1 2 3; do
+  dnf install -y docker && break
+  echo "[user-data] dnf attempt $attempt failed, retrying in 10 s"
+  sleep 10
+done
+command -v docker >/dev/null # stop here (set -e) if Docker never installed
+systemctl enable --now docker
+usermod -aG docker ec2-user
+
+read_param() {
+  aws ssm get-parameter --region "$REGION" --name "$1" --query Parameter.Value --output text
+}
+
+IMAGE_TAG="$(read_param "$PARAM_PREFIX/$COLOR/image_tag")"
+CHAOS_MODE="$(read_param "$PARAM_PREFIX/chaos_mode")"
+echo "[user-data] colour=$COLOR image_tag=$IMAGE_TAG chaos_mode=$CHAOS_MODE"
+
+if [ "$IMAGE_TAG" = "none" ]; then
+  echo "[user-data] Nothing has been released to $COLOR yet, so there is no container to start."
+  exit 0
+fi
+
+# Instance ID (via IMDSv2) names this instance's CloudWatch log stream.
+IMDS_TOKEN="$(curl -sf -X PUT http://169.254.169.254/latest/api/token -H "X-aws-ec2-metadata-token-ttl-seconds: 300")"
+INSTANCE_ID="$(curl -sf -H "X-aws-ec2-metadata-token: $IMDS_TOKEN" http://169.254.169.254/latest/meta-data/instance-id)"
+
+echo "[user-data] Logging in to ECR and pulling $REPO_URL:$IMAGE_TAG"
+aws ecr get-login-password --region "$REGION" | docker login --username AWS --password-stdin "$REGISTRY"
+docker pull "$REPO_URL:$IMAGE_TAG"
+docker logout "$REGISTRY"
+
+docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+docker run -d --name "$CONTAINER" \
+  --restart unless-stopped \
+  -p "$APP_PORT:5000" \
+  -e CHAOS_MODE="$CHAOS_MODE" \
+  --log-driver awslogs \
+  --log-opt awslogs-region="$REGION" \
+  --log-opt awslogs-group="$LOG_GROUP" \
+  --log-opt awslogs-stream="$COLOR/$INSTANCE_ID" \
+  "$REPO_URL:$IMAGE_TAG"
+
+echo "[user-data] SplitEase $IMAGE_TAG is running on the $COLOR environment"
