@@ -131,9 +131,19 @@ pipeline {
                         withCredentials([sshUserPrivateKey(credentialsId: 'ec2-ssh-key', keyFileVariable: 'SSH_KEY_FILE', usernameVariable: 'SSH_USER')]) {
                             dir('ansible') {
                                 sh '''#!/bin/bash
+                                    # A key pasted into the Jenkins web form can arrive with Windows
+                                    # line endings (CRLF) and/or without its final newline; OpenSSH
+                                    # then refuses it ("Load key: error in libcrypto"). Use a cleaned
+                                    # copy in a private temp folder that is deleted when this step ends.
+                                    KEY_DIR="$(mktemp -d)"
+                                    trap 'rm -rf "$KEY_DIR"' EXIT
+                                    tr -d '\\r' < "$SSH_KEY_FILE" > "$KEY_DIR/key"
+                                    if [ -n "$(tail -c1 "$KEY_DIR/key")" ]; then echo >> "$KEY_DIR/key"; fi
+                                    chmod 600 "$KEY_DIR/key"
+
                                     set +e
                                     ansible-playbook playbooks/deploy.yml \
-                                        --private-key "$SSH_KEY_FILE" --user "$SSH_USER" \
+                                        --private-key "$KEY_DIR/key" --user "$SSH_USER" \
                                         -e target_color=${IDLE_COLOR} -e ecr_repository_url=${ECR_REPO}
                                     rc=$?
                                     # rc 4 = some hosts were unreachable (typically an instance the

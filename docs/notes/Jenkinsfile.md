@@ -37,3 +37,13 @@ Jenkinsfile. Jenkins logs then showed two builds for one commit, 17 s apart: one
 change" (pollSCM) and one from "Branch indexing". For CI that only wastes time, but for a release
 the second run would deploy again and **flip traffic to the other colour**. Keeping one polling
 mechanism fixed it.
+
+**Lesson learned: "Load key: error in libcrypto".** In the first real release, Ansible got
+`Permission denied (publickey)` even though the same key worked from the laptop. The log showed
+`Load key "****": error in libcrypto`: SSH couldn't even read the key Jenkins handed it. A test on a
+throwaway key reproduced the error for both causes: a **missing final newline** and **Windows (CRLF)
+line endings**. Browsers can submit text-box contents with CRLF, so a perfectly pasted key can still
+break. The deploy stage now writes a cleaned copy (`tr -d '\r'`, plus a final newline) into a
+private `mktemp -d` folder (mode 700) and deletes it with `trap ... EXIT`. The key is never printed.
+(That release still succeeded, because the ASG replaced the instance and user data booted the new
+version from SSM, which is the designed fallback.)
