@@ -31,7 +31,9 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
   "healthy" poll could pass a bad release.
 - **Ansible rc 4** (unreachable host, usually an instance being replaced by the ASG) is tolerated;
   the ALB health check is the gate.
-- **t3 standard credits = no launch credits**, so the ASG grace period is 300 s (variable), and
+- **t3 standard credits = no launch credits**: measured user data = 311 s for the Docker install alone
+  (72% CPU steal), ~440 s to healthy, so the ASG grace period is **600 s** (300 s caused endless
+  replacements), and
   the `/cpu` scale-out demo must use an instance that has been up for 45+ minutes (otherwise CPU is
   capped at the 10% baseline).
 - **Jenkins IAM access key is NOT created by Terraform** (it would end up in state). The student

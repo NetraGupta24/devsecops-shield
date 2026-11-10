@@ -57,5 +57,9 @@ variable "app_port" {
 variable "health_check_grace_period" {
   description = "Seconds a new instance gets to boot (user data) before failed ALB health checks make the ASG replace it. t3 in 'standard' credit mode starts with 0 CPU credits, so boot runs at baseline speed."
   type        = number
-  default     = 300
+  # Measured 2026-11-10 on a fresh t3.micro (0 credits, ~72% CPU steal):
+  # user data took 311 s just to install Docker; image pull + start + 2 ALB
+  # checks add ~2 min, so ~440 s in total. 300 s made the ASG kill every new
+  # instance before it could become healthy. 600 s leaves a safe margin.
+  default = 600
 }
