@@ -27,5 +27,46 @@ on `main` is released, which is normal team practice.
 **First release only:** the old colour has never run anything (`none`). After the first successful
 switch it is given the same release, so it becomes healthy and rollback has a target.
 
-**`pollSCM('H/2 * * * *')`:** Jenkins asks GitHub for new commits about every 2 minutes, because
-GitHub can't send webhooks to localhost. `H` spreads the load.
+**How builds are triggered (Poll SCM):** GitHub can't send webhooks to `localhost`, so Jenkins
+*polls* GitHub instead. In this multibranch setup the polling is the job's **branch indexing**,
+which runs every minute (`jenkins/jobs/splitease/config.xml`). It finds new branches and new
+commits, and builds whatever changed.
+
+**Lesson learned:** the first version *also* had `triggers { pollSCM('H/2 * * * *') }` in the
+Jenkinsfile. Jenkins logs then showed two builds for one commit, 17 s apart: one "Started by an SCM
+change" (pollSCM) and one from "Branch indexing". For CI that only wastes time, but for a release
+the second run would deploy again and **flip traffic to the other colour**. Keeping one polling
+mechanism fixed it.
+
+**Lesson learned: "Load key: error in libcrypto".** In the first real release, Ansible got
+`Permission denied (publickey)` even though the same key worked from the laptop. The log showed
+`Load key "****": error in libcrypto`: SSH couldn't even read the key Jenkins handed it. A test on a
+throwaway key reproduced the error for both causes: a **missing final newline** and **Windows (CRLF)
+line endings**. Browsers can submit text-box contents with CRLF, so a perfectly pasted key can still
+break. The deploy stage now writes a cleaned copy (`tr -d '\r'`, plus a final newline) into a
+private `mktemp -d` folder (mode 700) and deletes it with `trap ... EXIT`. The key is never printed.
+(That release still succeeded, because the ASG replaced the instance and user data booted the new
+version from SSM, which is the designed fallback.)
+
+**Second lesson: protect the pipeline from a broken credential.** Cleaning line endings wasn't
+enough (build #9 still got `error in libcrypto`), so the stored key had another defect from the
+copy-paste. Two changes:
+1. **Pre-flight key check:** before Ansible runs, `ssh-keygen -y` tests the key. If it fails, the
+   stage stops immediately with yes/no facts (BEGIN/END lines present? public key pasted by
+   mistake? how many lines, any spaces?) and **never prints key material**. Without this, a broken
+   key looked like "host unreachable", which the stage deliberately tolerates (for ASG
+   replacements), and the failure only surfaced minutes later at the version check.
+2. **Safe way to copy the key into Jenkins:** `clip.exe < ~/.ssh/splitease-deploy` copies the file's
+   exact bytes to the Windows clipboard, avoiding terminal-copy damage (wrapped lines, padding
+   spaces). Afterwards, clear the clipboard with `printf '' | clip.exe`.
+
+**What build #9 proved:** green was healthy but still running the *old* build. The health gate alone
+would have passed, but the **version check on the test listener (8080) refused to switch**, the
+idle colour's SSM tag was restored, and v1 kept serving users. That is exactly why the pipeline
+checks *both* health and version.
+
+**Phase 14 (Grafana annotation):** right after the switch, the stage posts an annotation such as
+"Release build-15: traffic blue -> green" (`scripts/grafana-annotate.sh`, token from the Jenkins
+credential `grafana-api-token`). It is wrapped in `catchError(buildResult: 'SUCCESS',
+stageResult: 'SUCCESS')`, and the script always exits 0, so monitoring problems can **never** fail a
+release.

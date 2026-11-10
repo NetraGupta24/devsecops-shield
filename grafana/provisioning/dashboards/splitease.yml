@@ -1,0 +1,15 @@
+# Tells Grafana to load every dashboard JSON file from /var/lib/grafana/dashboards
+# (the repo's grafana/dashboards folder, mounted read-only). Dashboards are code:
+# edit the JSON in git, not in the UI.
+apiVersion: 1
+
+providers:
+  - name: splitease
+    orgId: 1
+    folder: SplitEase
+    type: file
+    disableDeletion: true
+    allowUiUpdates: false
+    updateIntervalSeconds: 30
+    options:
+      path: /var/lib/grafana/dashboards

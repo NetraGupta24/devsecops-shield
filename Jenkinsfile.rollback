@@ -42,6 +42,12 @@ pipeline {
         stage('Switch traffic back') {
             steps {
                 sh './scripts/bluegreen.sh switch ${TARGET_COLOR}'
+                // Grafana annotation; can never fail the rollback (see Jenkinsfile).
+                catchError(buildResult: 'SUCCESS', stageResult: 'SUCCESS', message: 'Grafana annotation skipped') {
+                    withCredentials([string(credentialsId: 'grafana-api-token', variable: 'GRAFANA_TOKEN')]) {
+                        sh "./scripts/grafana-annotate.sh 'Rollback: traffic ${env.LIVE_COLOR} -> ${env.TARGET_COLOR} (${env.TARGET_TAG})' rollback ${env.TARGET_COLOR}"
+                    }
+                }
             }
         }
 
