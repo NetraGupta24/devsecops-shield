@@ -1,0 +1,10 @@
+# Jenkins plugins installed into the image (latest versions compatible with this Jenkins LTS).
+workflow-aggregator
+workflow-multibranch
+git
+credentials-binding
+ssh-credentials
+pipeline-stage-view
+timestamper
+junit
+ws-cleanup
