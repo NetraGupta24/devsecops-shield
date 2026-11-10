@@ -16,7 +16,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
 | Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
 | Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
-| Part B AWS | **v2 LIVE on green** (build #10, ~18:10 UTC); blue = v1 build-8 (rollback target) | #8 v1→blue (Ansible key failed; ASG + user data delivered it). #9 v2 blocked by the 8080 version check (key still unreadable; green healthy but old build → no switch, tag restored). Key re-entered via `clip.exe`, plus a pre-flight key check. #10: Ansible updated green in place (17 ok, 0 unreachable) → health gate → switch. Next: rollback job (student clicks Build Now) |
+| Part B AWS | Demos 1, 5, 6 done; **chaos release in progress** (chaos_mode=true → live blue) | #10 v2 → green. Rollback job #1: green → blue (v1) OK. #11 bad release v2.1 → green: Ansible OK, ALB went stale-healthy 2 polls then ResponseCodeMismatch → stopped, tag restored, live blue untouched; ASG replaced the bad green instance (healthy again after ~8 min); green-unhealthy-hosts alarm fired (email). #12 revert → v2 live on green. CPU credits before the chaos release: blue 14.2 (old instance), green 2.3 |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -63,7 +63,7 @@ Last updated: 2026-11-10 (after real Jenkins CI runs).
    explicit approval before `terraform apply`.
 3. `terraform apply tfplan` (after approval).
 4. Student adds Jenkins credentials and confirms the SNS email.
-5. ~~v1 to blue (#8)~~ ~~v2 to green (#10)~~. Rollback job: student clicks Build Now.
+5. ~~v1 to blue (#8)~~ ~~v2 to green (#10)~~ ~~rollback~~ ~~bad release (#11) + revert (#12)~~.
    Planned demo order (keeps an old, credit-rich instance for /cpu): rollback (live → blue v1) →
    bad release (merge demo/bad-release → deploy to green fails, no switch) → `git revert` → release
    (live → green v2) → chaos_mode=true + release (live → blue, old instance) → /crash →
