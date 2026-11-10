@@ -76,8 +76,10 @@ def split_equal(total_paise, names):
     in the list, so the shares always add up to the exact total.
     Example: Rs 100.00 between 3 people -> 33.34, 33.33, 33.33
     """
-    base, remainder = divmod(total_paise, len(names))
-    return [(name, base + (1 if i < remainder else 0)) for i, name in enumerate(names)]
+    # DEMO BUG (branch demo/failing-test): "simplified" rounding that forgets
+    # the leftover paise, so Rs 100 / 3 gives 33.33 x 3 = 99.99. Unit tests catch it.
+    share = total_paise // len(names)
+    return [(name, share) for name in names]
 
 
 # ---- v2: custom splits ------------------------------------------------------
