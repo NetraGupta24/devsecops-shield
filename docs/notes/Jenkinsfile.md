@@ -27,5 +27,13 @@ on `main` is released, which is normal team practice.
 **First release only:** the old colour has never run anything (`none`). After the first successful
 switch it is given the same release, so it becomes healthy and rollback has a target.
 
-**`pollSCM('H/2 * * * *')`:** Jenkins asks GitHub for new commits about every 2 minutes, because
-GitHub can't send webhooks to localhost. `H` spreads the load.
+**How builds are triggered (Poll SCM):** GitHub can't send webhooks to `localhost`, so Jenkins
+*polls* GitHub instead. In this multibranch setup the polling is the job's **branch indexing**,
+which runs every minute (`jenkins/jobs/splitease/config.xml`). It finds new branches and new
+commits, and builds whatever changed.
+
+**Lesson learned:** the first version *also* had `triggers { pollSCM('H/2 * * * *') }` in the
+Jenkinsfile. Jenkins logs then showed two builds for one commit, 17 s apart: one "Started by an SCM
+change" (pollSCM) and one from "Branch indexing". For CI that only wastes time, but for a release
+the second run would deploy again and **flip traffic to the other colour**. Keeping one polling
+mechanism fixed it.

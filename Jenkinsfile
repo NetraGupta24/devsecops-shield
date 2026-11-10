@@ -15,11 +15,12 @@ pipeline {
         timeout(time: 60, unit: 'MINUTES')
     }
 
-    // Jenkins runs on localhost, so GitHub cannot call it (no webhooks).
-    // Instead Jenkins asks GitHub for new commits every ~2 minutes.
-    triggers {
-        pollSCM('H/2 * * * *')
-    }
+    // Trigger: Jenkins runs on localhost, so GitHub cannot call it (no
+    // webhooks). Instead the multibranch job "splitease" polls GitHub every
+    // minute (branch indexing, see jenkins/jobs/splitease/config.xml) and
+    // builds any branch whose latest commit changed. There is deliberately NO
+    // pollSCM() here as well: two polling mechanisms started two builds for
+    // the same commit, and on main a second release would flip traffic again.
 
     environment {
         AWS_DEFAULT_REGION = 'ap-south-1'
