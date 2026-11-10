@@ -61,20 +61,42 @@ cmd_live_color() {
   echo "$live"
 }
 
-cmd_wait_healthy() { # $1 = colour, $2 = timeout seconds (default 900)
-  local color="$1" timeout="${2:-900}" waited=0 arn states
+cmd_wait_healthy() { # $1 = colour, $2 = timeout seconds (default 900), $3 = required healthy polls (default 5)
+  local color="$1" timeout="${2:-900}" required="${3:-5}" waited=0 bad_answers=0 streak=0 arn states
   valid_color "$color"
   arn="$(tg_arn "$color")"
-  echo "Waiting up to ${timeout}s for every ${color} target to be healthy..."
+  # Why "N healthy polls in a row" and not "healthy once": right after Ansible
+  # replaces a container, the ALB still shows the OLD container's "healthy"
+  # status. It needs unhealthy_threshold x interval = 3 x 15 s = 45 s to notice
+  # a bad new container. 5 polls 15 s apart (60 s) covers that window.
+  echo "Waiting up to ${timeout}s for every ${color} target to be healthy for ${required} checks in a row..."
   while true; do
-    # Ignore targets that are draining (being removed by Auto Scaling).
+    # One line per target: <instance-id> <state> <reason>. Draining targets
+    # (being removed by Auto Scaling) are ignored.
     states="$(aws elbv2 describe-target-health --target-group-arn "$arn" \
-      --query 'TargetHealthDescriptions[?TargetHealth.State!=`draining`].[Target.Id,TargetHealth.State]' --output text)"
+      --query 'TargetHealthDescriptions[?TargetHealth.State!=`draining`].[Target.Id,TargetHealth.State,TargetHealth.Reason]' \
+      --output text)"
     echo "  [${waited}s] ${states:-no targets registered yet}" | tr '\n\t' '; '
     echo
     if [[ -n "$states" ]] && ! awk '{print $2}' <<<"$states" | grep -qv '^healthy$'; then
-      echo "All ${color} targets are healthy."
-      return 0
+      streak=$((streak + 1))
+      if (( streak >= required )); then
+        echo "All ${color} targets have been healthy for ${required} checks in a row."
+        return 0
+      fi
+    else
+      streak=0
+    fi
+    # "ResponseCodeMismatch" = the app IS running but answers /health with an
+    # error (e.g. HTTP 500): a bad release, not a slow boot. Fail after ~1 min
+    # instead of waiting for the full timeout.
+    if grep -q 'Target.ResponseCodeMismatch' <<<"$states"; then
+      bad_answers=$((bad_answers + 1))
+      if (( bad_answers >= 4 )); then
+        die "${color} app answers /health with an error code (Target.ResponseCodeMismatch): bad release"
+      fi
+    else
+      bad_answers=0
     fi
     if (( waited >= timeout )); then
       die "${color} targets did not all become healthy within ${timeout}s"

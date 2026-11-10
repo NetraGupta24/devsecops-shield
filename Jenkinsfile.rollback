@@ -35,7 +35,7 @@ pipeline {
         stage('Check previous colour is healthy') {
             steps {
                 // Never send users to a colour that is not healthy.
-                sh './scripts/bluegreen.sh wait-healthy ${TARGET_COLOR} 120'
+                sh './scripts/bluegreen.sh wait-healthy ${TARGET_COLOR} 120 2'
             }
         }
 

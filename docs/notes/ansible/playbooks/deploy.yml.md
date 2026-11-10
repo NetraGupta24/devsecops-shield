@@ -13,8 +13,10 @@ ansible-playbook playbooks/deploy.yml -e target_color=green -e ecr_repository_ur
    (**idempotent**: a second run changes nothing).
 4. Start the container with exactly the same settings as user data (`--restart unless-stopped`,
    awslogs).
-5. Wait for `http://127.0.0.1:5000/health`, then check `/version` shows the **expected build
-   number**. A mismatch fails the deploy.
+5. Wait for `http://127.0.0.1:5000/version` and check it shows the **expected build number**. A
+   mismatch fails the deploy. Ansible deliberately doesn't judge `/health`: deciding whether the
+   release is *healthy* is the job of the ALB health check in the next pipeline stage (the release
+   gate). That keeps the roles clear: Ansible deploys, the ALB verifies.
 6. `docker image prune` removes old images to save disk.
 
 **Exit codes Jenkins cares about:** 0 = OK, 2 = a task failed (pipeline fails), 4 = a host was

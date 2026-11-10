@@ -92,21 +92,23 @@
       when: needs_replace | bool
       changed_when: true
 
-    - name: Wait until the app answers /health on the instance
-      ansible.builtin.uri:
-        url: "http://127.0.0.1:{{ app_port }}/health"
-        return_content: true
-      register: health
-      until: health.status == 200
-      retries: 20
-      delay: 3
-
-    - name: Confirm the instance runs the expected build
+    # Ansible's job is to DEPLOY: prove the new container started and serves
+    # the expected build. Judging whether it is HEALTHY is left to the ALB
+    # health check in the pipeline's next stage (the real release gate).
+    - name: Wait until the new container answers /version
       ansible.builtin.uri:
         url: "http://127.0.0.1:{{ app_port }}/version"
         return_content: true
       register: version
-      failed_when: version.json.build != (image_tag | replace('build-', ''))
+      until: version.status == 200
+      retries: 20
+      delay: 3
+
+    - name: Confirm the instance runs the expected build
+      ansible.builtin.assert:
+        that: version.json.build == (image_tag | replace('build-', ''))
+        fail_msg: "Expected build {{ image_tag }}, but the container reports build {{ version.json.build }}"
+        quiet: true
 
     - name: Remove old, unused images to save disk space
       ansible.builtin.command: docker image prune -af
