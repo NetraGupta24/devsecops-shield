@@ -10,8 +10,8 @@ All other CLAUDE.md rules still apply (Rule 7 secrets, Rule 8 cost approvals).
 |---|---|---|
 | 0 Setup | Done, except the GitHub remote | Tools present. AWS CLI works as IAM user `vle8-terraform-user`, region ap-south-1. GitHub not connected yet (no remote, no auth) |
 | 1 SplitEase v1 + pytest | Done | 87 tests pass. App works on localhost:5000 |
-| 2 Docker | Next | |
-| 3 Jenkins local | Not started | |
+| 2 Docker | Done | Image 190 MB, runs as uid 10001 under Gunicorn. `/crash` + `--restart unless-stopped` restarted the container (RestartCount 0→1). Chaos endpoints 404 when off |
+| 3 Jenkins local | Next | |
 | 4 Security gates | Not started | |
 | 5-11 Code (Terraform, Ansible, Jenkinsfiles) | Not started | |
 | v2 + demo branches | Not started | |
@@ -27,4 +27,4 @@ All other CLAUDE.md rules still apply (Rule 7 secrets, Rule 8 cost approvals).
 - GitHub repo URL and GitHub authentication from WSL.
 
 ## Next step
-- Phase 2: Dockerfile, `.dockerignore`, build and run locally, `/crash` + restart policy test.
+- Phase 3: jenkins/Dockerfile + docker-compose.yml, Jenkinsfile (Checkout → Tests → Build).

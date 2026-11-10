@@ -1,0 +1,13 @@
+# Allow-list: send ONLY the app/ folder to Docker as the build context.
+# Everything else (.git history, Terraform state, Jenkins files, docs, local
+# virtualenvs, secrets) stays out of the image and out of the build.
+*
+!app/
+
+# ...but not the tests or Python caches inside app/
+app/tests/
+app/pytest.ini
+app/requirements-dev.txt
+**/__pycache__/
+**/*.pyc
+**/.pytest_cache/
