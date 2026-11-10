@@ -3,28 +3,86 @@
 Resume a new session with: **"Continue from PROGRESS.md"**.
 Mode for this build: Rule 2 is overridden (build end to end without stopping between phases).
 All other CLAUDE.md rules still apply (Rule 7 secrets, Rule 8 cost approvals).
+Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
 
 ## Status
 
-| Phase | Status | Notes |
+| Step | Status | Notes |
 |---|---|---|
-| 0 Setup | Done, except the GitHub remote | Tools present. AWS CLI works as IAM user `vle8-terraform-user`, region ap-south-1. GitHub not connected yet (no remote, no auth) |
-| 1 SplitEase v1 + pytest | Done | 87 tests pass. App works on localhost:5000 |
-| 2 Docker | Done | Image 190 MB, runs as uid 10001 under Gunicorn. `/crash` + `--restart unless-stopped` restarted the container (RestartCount 0→1). Chaos endpoints 404 when off |
-| 3 Jenkins local | Next | |
-| 4 Security gates | Not started | |
-| 5-11 Code (Terraform, Ansible, Jenkinsfiles) | Not started | |
-| v2 + demo branches | Not started | |
-| Part B AWS deploy | Not started (needs approval) | |
+| Phase 0 Setup | Done | All tools present. AWS CLI = IAM user `vle8-terraform-user`, ap-south-1. GitHub: git@github.com:NetraGupta24/devsecops-shield.git (public), SSH auth works |
+| Phase 1 SplitEase v1 + pytest | Done | 87 tests pass, localhost:5000 works |
+| Phase 2 Docker | Done | non-root uid 10001, Gunicorn; `/crash` + `--restart unless-stopped` verified |
+| Phase 3 Jenkins local | Done (real run) | Push to GitHub was detected by the 1-minute branch scan, and all 6 branches built automatically (2026-11-10) |
+| Phase 4 Security gates | Done (real run) | Jenkins: demo/failing-test failed at Unit tests, demo/fake-secret at Gitleaks (generic-api-key), demo/vulnerable-image at Trivy (2 HIGH); feature/v2 + demo/bad-release passed CI; main passed CI and stopped at Release (no AWS creds yet) |
+| Phases 5–11 code | Written and validated | terraform fmt/validate/plan (placeholder vars: 45 to add, 0 errors), bash -n (incl. rendered user data), ansible syntax-check, live inventory query, mocked wait-healthy tests |
+| v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
+| Part B AWS | **Demos 1–9 and 11 done**; demo 10 (terminate in console) + recordings = student; then destroy | #13 chaos release → live blue (chaos on). Demo 7 /crash: 502 for ~2 s, RestartCount 0→1, logs in CloudWatch. Demo 9 /cpu: ASG CPU 100% → blue scaled 1→2 at ~18:58, high-cpu alarm ALARM→OK. Demo 8 docker stop on green: unhealthy in ~47 s, ASG replaced it at 19:00:49. Alarm emails: green unhealthy 18:26/19:04, blue high-cpu 18:58, blue unhealthy 19:02 (scale-out instance booting). Evidence list: docs/screenshots/CHECKLIST.md. Destroy plan: 45 to destroy (incl. 6 ECR images). chaos_mode is still **true** |
+| Phase 13 Documentation | Done | `README.md`, `docs/architecture/architecture.md` (Mermaid diagrams), `docs/report/report.md` (measured results, problems and fixes, cost, future work) |
+| Phase 14 Grafana | Code done; **waiting: student approves `terraform apply` (2 to add: splitease-grafana user + read-only policy), fills `jenkins/.env`, creates a Grafana service-account token → Jenkins credential `grafana-api-token`** | `grafana/` provisioning + dashboard JSON (9 panels, refresh 1m), compose service `grafana/grafana:13.2.5` on 127.0.0.1:3000, `scripts/grafana-annotate.sh` (always exit 0) + `catchError` in both Jenkinsfiles. Tested BEFORE commit: throwaway Grafana against the real account → datasource health OK (metrics + logs), all panels return data (found and fixed: code-mode SEARCH needs builder fields); annotation script exit 0 for valid/missing/wrong token and Grafana down |
+
+## Key design decisions (and why)
+- **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
+  first switch, the old colour's SSM tag is seeded with the same build so it becomes healthy and can
+  be rolled back to.
+- **Multibranch job**: every branch runs CI; **only `main`** pushes to ECR and deploys. The bad
+  release demo is done by merging `demo/bad-release` into main, then reverting.
+- **Gitleaks** scans `--log-opts=HEAD` (full history of the built branch only), so the fake secret
+  on its demo branch never breaks `main`.
+- **Only one build trigger** (multibranch branch indexing every minute). `pollSCM` in the
+  Jenkinsfile caused duplicate builds of the same commit, which on main would release twice and flip
+  traffic again. The stale trigger was cleared from the main branch job (backup:
+  `config.xml.bak-before-trigger-fix`).
+- **Health gate**: `wait-healthy` requires 5 consecutive healthy polls (60 s > ALB's 45 s
+  detection), and fails fast on `Target.ResponseCodeMismatch`. A mocked test proved a single
+  "healthy" poll could pass a bad release.
+- **Ansible rc 4** (unreachable host, usually an instance being replaced by the ASG) is tolerated;
+  the ALB health check is the gate.
+- **t3 standard credits = no launch credits**: measured user data = 311 s for the Docker install alone
+  (72% CPU steal), ~440 s to healthy, so the ASG grace period is **600 s** (300 s caused endless
+  replacements), and
+  the `/cpu` scale-out demo must use an instance that has been up for 45+ minutes (otherwise CPU is
+  capped at the 10% baseline).
+- **Jenkins IAM access key is NOT created by Terraform** (it would end up in state). The student
+  creates it after each apply and stores it only in Jenkins Credentials.
+- App SG egress is HTTPS only; IMDSv2 with hop limit 1; detailed monitoring on (1-minute metrics).
 
 ## Environment facts
-- Windows + WSL2 Ubuntu 26.04, Docker Desktop 29.8 (WSL integration), Python 3.14, Terraform 1.16,
-  Ansible core 2.20 (apt), AWS CLI 2.31.
-- `sudo` needs a password, so the student must run any `apt install` themselves.
-- No GitHub SSH key or credential helper yet.
+- Windows + WSL2 Ubuntu 26.04, Docker Desktop 29.8, docker.sock GID 1001, Python 3.14,
+  Terraform 1.16 (AWS provider 6.72.0), Ansible core 2.20 on the laptop / 2.21.6 in Jenkins.
+- `sudo` needs a password (the student runs any apt installs).
+- Public IP at time of writing: 106.219.183.153 (home IPs can change; update `my_ip` and re-apply).
 
-## Open problems / waiting on student
-- GitHub repo URL and GitHub authentication from WSL.
+## Waiting on the student (credential steps Claude must not do)
+1-4. DONE (GitHub SSH, deploy key, alert email in terraform.tfvars, Jenkins unlocked).
+5. Approve `terraform apply` (plan summary given in chat).
+6. After apply: create an access key for IAM user `splitease-jenkins` and add Jenkins credentials
+   `aws-access-key-id`, `aws-secret-access-key` (Secret text) and `ec2-ssh-key` (SSH username
+   `ec2-user` + private key `~/.ssh/splitease-deploy`); confirm the SNS subscription email.
 
-## Next step
-- Phase 3: jenkins/Dockerfile + docker-compose.yml, Jenkinsfile (Checkout → Tests → Build).
+## Next steps (Phase 14 verification)
+1. Student: approve + run `terraform apply` (2 to add), create the splitease-grafana access key,
+   fill `jenkins/.env` (`cp .env.example .env`).
+2. Claude: `docker compose up -d grafana`, check provisioning + data source health.
+3. Student: Grafana → Service accounts → Editor → token → Jenkins credential `grafana-api-token`.
+4. Claude: release (push) → annotation on the dashboard; `/cpu` demo on the live colour (needs ≥10
+   CPU credits) → dashboard shows CPU + instance count.
+5. Screenshot list; ask before `terraform destroy`.
+
+## Next steps (Part B runbook, history)
+1. DONE: job URLs set, all branches pushed, Jenkins restarted, CI verified on all 6 branches.
+2. DONE: real `terraform plan` = 45 to add (saved as terraform/tfplan). WAITING for the student's
+   explicit approval before `terraform apply`.
+3. `terraform apply tfplan` (after approval).
+4. Student adds Jenkins credentials and confirms the SNS email.
+5. ~~v1 to blue (#8)~~ ~~v2 to green (#10)~~ ~~rollback~~ ~~bad release (#11) + revert (#12)~~.
+   Planned demo order (keeps an old, credit-rich instance for /cpu): rollback (live → blue v1) →
+   bad release (merge demo/bad-release → deploy to green fails, no switch) → `git revert` → release
+   (live → green v2) → chaos_mode=true + release (live → blue, old instance) → /crash →
+   /cpu (scale-out + CPU alarm email) → docker stop (ASG replaces) → terminate in console →
+   chaos_mode=false.
+   NOTE: every push to main starts a release, so commit locally and push only when a release is wanted.
+6. ~~Bad release, crash, docker stop, cpu, alarm emails~~. Terminate demo: student, in the console.
+7. ~~Screenshot list~~ (docs/screenshots/CHECKLIST.md). Student records/screenshots BEFORE destroy,
+   then runs `terraform destroy` (Claude's apply/destroy are blocked by Claude Code auto mode).
+   After destroy, the next session needs: `terraform apply`, a new Jenkins access key (the IAM user
+   is recreated) in the Jenkins credentials; the SSH key credential stays valid (same key pair file).

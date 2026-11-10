@@ -1,0 +1,19 @@
+# Grafana data source, provisioned as code (loaded at Grafana start-up).
+# Grafana reads CloudWatch metrics and logs with the READ-ONLY IAM user
+# "splitease-grafana" (created by Terraform). Its access key is NOT in this
+# file: Grafana substitutes the ${...} values from environment variables,
+# which docker compose loads from the gitignored jenkins/.env file.
+apiVersion: 1
+
+datasources:
+  - name: CloudWatch
+    uid: cloudwatch
+    type: cloudwatch
+    isDefault: true
+    editable: false
+    jsonData:
+      authType: keys
+      defaultRegion: ap-south-1
+    secureJsonData:
+      accessKey: ${GRAFANA_AWS_ACCESS_KEY_ID}
+      secretKey: ${GRAFANA_AWS_SECRET_ACCESS_KEY}

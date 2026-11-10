@@ -166,7 +166,7 @@ main() {
     other-color) other_color "${1:?colour}" ;;
     get-tag) valid_color "${1:?colour}"; get_param "$PARAM_PREFIX/$1/image_tag" ;;
     set-tag) valid_color "${1:?colour}"; put_param "$PARAM_PREFIX/$1/image_tag" "${2:?tag}"; echo "SSM ${PARAM_PREFIX}/$1/image_tag = $2" ;;
-    wait-healthy) cmd_wait_healthy "${1:?colour}" "${2:-900}" ;;
+    wait-healthy) cmd_wait_healthy "${1:?colour}" "${2:-900}" "${3:-5}" ;;
     check-version) cmd_check_version "${1:?port}" "${2:?build}" ;;
     switch) cmd_switch "${1:?colour}" ;;
     status) cmd_status ;;

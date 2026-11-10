@@ -4,7 +4,7 @@
 
 resource "aws_security_group" "alb" {
   name        = "${var.project}-alb-sg"
-  description = "SplitEase ALB: HTTP 80 from anywhere, test listener 8080 from the owner's IP"
+  description = "SplitEase ALB: HTTP 80 from anywhere, test listener 8080 from the owner IP only"
   vpc_id      = aws_vpc.main.id
 
   tags = { Name = "${var.project}-alb-sg" }
@@ -39,7 +39,7 @@ resource "aws_vpc_security_group_egress_rule" "alb_to_app" {
 
 resource "aws_security_group" "app" {
   name        = "${var.project}-app-sg"
-  description = "SplitEase instances: app port from the ALB only, SSH from the owner's IP"
+  description = "SplitEase instances: app port from the ALB only, SSH from the owner IP only"
   vpc_id      = aws_vpc.main.id
 
   tags = { Name = "${var.project}-app-sg" }
