@@ -3,7 +3,7 @@
 Resume a new session with: **"Continue from PROGRESS.md"**.
 Mode for this build: Rule 2 is overridden (build end to end without stopping between phases).
 All other CLAUDE.md rules still apply (Rule 7 secrets, Rule 8 cost approvals).
-Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
+Last updated: 2026-11-11 ~17:50 UTC (Phase 14 verified; next: recordings, then destroy).
 
 ## Status
 
@@ -18,7 +18,7 @@ Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
 | v2 + demo branches | Done (local) | `feature/v2`, `demo/failing-test`, `demo/fake-secret`, `demo/vulnerable-image`, `demo/bad-release`, each verified locally. See docs/notes/demo-branches.md |
 | Part B AWS | **Demos 1–9 and 11 done**; demo 10 (terminate in console) + recordings = student; then destroy | #13 chaos release → live blue (chaos on). Demo 7 /crash: 502 for ~2 s, RestartCount 0→1, logs in CloudWatch. Demo 9 /cpu: ASG CPU 100% → blue scaled 1→2 at ~18:58, high-cpu alarm ALARM→OK. Demo 8 docker stop on green: unhealthy in ~47 s, ASG replaced it at 19:00:49. Alarm emails: green unhealthy 18:26/19:04, blue high-cpu 18:58, blue unhealthy 19:02 (scale-out instance booting). Evidence list: docs/screenshots/CHECKLIST.md. Destroy plan: 45 to destroy (incl. 6 ECR images). chaos_mode is still **true** |
 | Phase 13 Documentation | Done | `README.md`, `docs/architecture/architecture.md` (Mermaid diagrams), `docs/report/report.md` (measured results, problems and fixes, cost, future work) |
-| Phase 14 Grafana | Running; verification release + /cpu demo in progress (2026-11-11) | Student applied the Grafana IAM user (47 resources), filled `jenkins/.env`, started Grafana, created service account `Jenkins` (Editor) + token → Jenkins credential `grafana-api-token`. Release #14 (no token yet) proved the annotation can't fail a release. Overnight the home IP changed (106.219.183.153 → 49.206.10.111): `my_ip` updated, apply changed only the 2 IP-restricted SG rules |
+| Phase 14 Grafana | **Done (verified 2026-11-11)** | Release #15: Jenkins logged `Grafana annotation added: Release build-15: traffic green -> blue` (live = blue, build 15). `/cpu` at 17:39:23 UTC: blue ASG CPU 51% → 100%, scale-out 1 → 2 at 17:43:30, blue-high-cpu alarm ALARM. Release #14 (no token) proved the annotation can't fail a release. IP changed overnight → `my_ip` 49.206.10.111, 2 SG rules updated. Student to confirm visually + take screenshots (CHECKLIST.md, Grafana section) |
 
 ## Key design decisions (and why)
 - **Initial live colour = green** (Terraform), so the first release lands on **blue**. After the
@@ -46,6 +46,14 @@ Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
   creates it after each apply and stores it only in Jenkins Credentials.
 - App SG egress is HTTPS only; IMDSv2 with hop limit 1; detailed monitoring on (1-minute metrics).
 
+## Security incident log
+- 2026-11-11: while verifying Grafana, Claude ran BusyBox `wget --password=...` inside the Grafana
+  container. BusyBox doesn't support that option and echoed it, so the **Grafana admin password
+  appeared in the local Claude Code session transcript** (not in git, not sent anywhere else).
+  The student was told immediately and chose not to rotate it (Grafana listens on 127.0.0.1 only).
+  Lesson: never pass a secret as a command-line option to an unfamiliar tool. Verify Grafana via
+  its logs and the Jenkins console instead of the admin login.
+
 ## Environment facts
 - Windows + WSL2 Ubuntu 26.04, Docker Desktop 29.8, docker.sock GID 1001, Python 3.14,
   Terraform 1.16 (AWS provider 6.72.0), Ansible core 2.20 on the laptop / 2.21.6 in Jenkins.
@@ -59,7 +67,7 @@ Last updated: 2026-11-10 ~19:45 UTC (Phase 13 docs + Phase 14 Grafana code).
    `aws-access-key-id`, `aws-secret-access-key` (Secret text) and `ec2-ssh-key` (SSH username
    `ec2-user` + private key `~/.ssh/splitease-deploy`); confirm the SNS subscription email.
 
-## Next steps (Phase 14 verification)
+## Next steps (Phase 14 verification, done except screenshots)
 1. Student: approve + run `terraform apply` (2 to add), create the splitease-grafana access key,
    fill `jenkins/.env` (`cp .env.example .env`).
 2. Claude: `docker compose up -d grafana`, check provisioning + data source health.

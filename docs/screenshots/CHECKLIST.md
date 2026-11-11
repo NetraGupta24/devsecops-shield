@@ -45,3 +45,23 @@ Also worth one screenshot each (they illustrate the architecture):
 | 9 | Check the live instance has **≥ 10 CPU credits** (EC2 → instance → Monitoring → *CPU credit balance*). A fresh t3 has 0 and can't go above 10% CPU. Then open `http://<alb>/cpu?seconds=300` and record the ASG Monitoring/Activity tabs (scale-out after ~3–4 min) |
 | 10 | EC2 console → select one `splitease-*` instance (the idle colour, so users aren't affected) → *Instance state* → **Terminate**. Record ASG Activity: a replacement is launched immediately and becomes healthy in ~8 min |
 | 11 | Shows up in your inbox during demos 5, 8, 9 and 10 |
+
+## Phase 14: Grafana (http://localhost:3000 → Dashboards → SplitEase → SplitEase - Production)
+
+Verified 2026-11-11: release **#15** (17:37 UTC / 23:07 IST) posted the annotation; `/cpu` at
+17:39 UTC (23:09 IST) pushed blue to 100% CPU and scaled it 1 → 2 at 17:43 UTC (23:13 IST).
+Set the time range to cover 23:00–23:45 IST (or "Last 1 hour" soon after the demo).
+
+| Capture | What it proves |
+|---|---|
+| Whole dashboard with the **yellow annotation marker**; hover it to show "Release build-15: traffic green -> blue" | Jenkins annotates every traffic switch |
+| **ALB requests by colour**: traffic moves from green to blue at the marker | Blue-Green switch, seen from the load balancer |
+| **CPU per ASG**: blue jumps to ~100% above the dashed 50% / 70% lines | `/cpu` demo (scaling target / alarm threshold) |
+| **Instances per ASG**: blue *desired* 1 → 2 (dashed), then *in service* 1 → 2; later back to 1 | Scale-out, then scale-in (~15 min after the load stops) |
+| **Healthy hosts**: blue 1 → 2 when the new instance passes `/health` | ALB health checks |
+| **Response time** and **5xx** panels during the load | Effect of CPU load on users |
+| **App logs** panel: `CHAOS: /cpu burning 2 CPU(s) for 300 s` | CloudWatch Logs in Grafana |
+| Connections → Data sources → **CloudWatch → Save & test** (success) | Read-only IAM user works |
+| Jenkins `main` **#15** console: `Grafana annotation added`; **#14** console: `Grafana annotation skipped` + `Finished: SUCCESS` | The annotation never fails a release |
+| (Optional) Jenkins `splitease-rollback` → Build Now → marker "Rollback: traffic blue -> green (build-14)" | Rollback annotation |
+| Inbox: "ALARM: splitease-blue-high-cpu" (around 17:43 UTC on 2026-11-11) | Alarm email |
